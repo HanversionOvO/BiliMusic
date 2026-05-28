@@ -1,0 +1,10 @@
+.claude
+.workflow
+design-system
+dist
+dist-electron
+node_modules
+
+dev.log
+package-lock.json
+
