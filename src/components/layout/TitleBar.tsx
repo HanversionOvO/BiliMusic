@@ -1,44 +1,25 @@
-import { Minus, Square, X } from 'lucide-react'
+import { Maximize2, Minimize2, Minus, X } from 'lucide-react'
+import { useEffect, useState } from 'react'
 
 export default function TitleBar() {
-  return (
-    <div
-      style={{
-        height: 36,
-        background: 'var(--glass-bg-heavy)',
-        backdropFilter: 'blur(20px)',
-        WebkitBackdropFilter: 'blur(20px)',
-        borderBottom: '1px solid var(--glass-border)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingLeft: 16,
-        WebkitAppRegion: 'drag',
-      } as React.CSSProperties}
-    >
-      <span
-        style={{
-          fontFamily: 'var(--font-heading)',
-          fontSize: 14,
-          color: 'var(--color-primary)',
-          fontWeight: 700,
-          letterSpacing: '0.02em',
-        }}
-      >
-        biliMusic
-      </span>
+  const [maximized, setMaximized] = useState(false)
 
-      <div
-        style={{
-          position: 'absolute',
-          right: 0,
-          display: 'flex',
-          WebkitAppRegion: 'no-drag',
-        } as React.CSSProperties}
-      >
-        <WindowButton icon={<Minus size={14} />} action="minimize" />
-        <WindowButton icon={<Square size={12} />} action="maximize" />
-        <WindowButton icon={<X size={14} />} action="close" isClose />
+  useEffect(() => {
+    const api = window.electronAPI
+    if (!api) return
+
+    api.isMaximized?.().then(setMaximized).catch(() => {})
+    return api.onMaximizedChange?.(setMaximized)
+  }, [])
+
+  return (
+    <div className="app-titlebar">
+      <span className="app-titlebar__brand">biliMusic</span>
+
+      <div className="app-titlebar__controls">
+        <WindowButton icon={<Minus size={14} />} action="minimize" label="最小化" />
+        <WindowButton icon={maximized ? <Minimize2 size={13} /> : <Maximize2 size={13} />} action="maximize" label={maximized ? '还原窗口' : '最大化'} />
+        <WindowButton icon={<X size={15} />} action="close" label="关闭" isClose />
       </div>
     </div>
   )
@@ -47,10 +28,12 @@ export default function TitleBar() {
 function WindowButton({
   icon,
   action,
+  label,
   isClose = false,
 }: {
   icon: React.ReactNode
   action: 'minimize' | 'maximize' | 'close'
+  label: string
   isClose?: boolean
 }) {
   const handleClick = () => {
@@ -63,29 +46,11 @@ function WindowButton({
 
   return (
     <button
+      type="button"
+      aria-label={label}
+      title={label}
+      className={`app-window-button ${isClose ? 'app-window-button--close' : ''}`}
       onClick={handleClick}
-      style={{
-        width: 46,
-        height: 36,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        border: 'none',
-        background: 'transparent',
-        color: 'var(--color-muted)',
-        cursor: 'pointer',
-        transition: 'all var(--duration-fast) var(--easing-default)',
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.background = isClose
-          ? 'var(--color-destructive)'
-          : 'var(--color-border)'
-        if (isClose) e.currentTarget.style.color = '#fff'
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.background = 'transparent'
-        e.currentTarget.style.color = 'var(--color-muted)'
-      }}
     >
       {icon}
     </button>

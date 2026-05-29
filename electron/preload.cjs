@@ -61,6 +61,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   minimize: () => ipcRenderer.send('window:minimize'),
   maximize: () => ipcRenderer.send('window:maximize'),
   close: () => ipcRenderer.send('window:close'),
+  isMaximized: () => ipcRenderer.invoke('window:isMaximized'),
+  onMaximizedChange: (callback) => {
+    const listener = (_event, value) => callback(Boolean(value))
+    ipcRenderer.on('window:maximized-change', listener)
+    return () => ipcRenderer.removeListener('window:maximized-change', listener)
+  },
   platform: 'win32',
   biliApi,
   lyricsApi,

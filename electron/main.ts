@@ -98,6 +98,14 @@ function createWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null
   })
+
+  const sendMaximizeState = () => {
+    mainWindow?.webContents.send('window:maximized-change', Boolean(mainWindow?.isMaximized() || mainWindow?.isFullScreen()))
+  }
+  mainWindow.on('maximize', sendMaximizeState)
+  mainWindow.on('unmaximize', sendMaximizeState)
+  mainWindow.on('enter-full-screen', sendMaximizeState)
+  mainWindow.on('leave-full-screen', sendMaximizeState)
 }
 
 // 窗口控制 IPC
@@ -110,6 +118,7 @@ ipcMain.on('window:maximize', () => {
   }
 })
 ipcMain.on('window:close', () => mainWindow?.close())
+ipcMain.handle('window:isMaximized', () => Boolean(mainWindow?.isMaximized() || mainWindow?.isFullScreen()))
 
 app.whenReady().then(() => {
   setupBiliHeaders()

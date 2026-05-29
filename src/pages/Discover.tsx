@@ -1,9 +1,19 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Play, Music, Loader2, TrendingUp, Disc3 } from 'lucide-react'
+import { Disc3, Loader2, Play, RefreshCw, TrendingUp } from 'lucide-react'
 import { usePlayer } from '@/contexts/PlayerContext'
-import TrackActions from '@/components/TrackActions'
 import { getMusicRanking, type VideoInfo } from '@/services/api'
 import type { Track } from '@/types'
+import {
+  ActionButton,
+  EmptyLibrary,
+  FeaturedGrid,
+  FeaturedTrackCard,
+  MusicHero,
+  MusicPageShell,
+  MusicSection,
+  TrackList,
+  TrackListRow,
+} from '@/components/AppleMusicPage'
 
 function videoToTrack(video: VideoInfo): Track {
   return {
@@ -42,20 +52,9 @@ export default function Discover() {
     }
   }
 
-  const handlePlayAll = useCallback(async () => {
-    if (tracks.length === 0) return
-    const playlist: Track[] = tracks.slice(0, 8).map((v) => ({
-      id: v.bvid,
-      title: v.title,
-      artist: v.ownerName,
-      coverUrl: v.pic,
-      duration: v.duration,
-      videoUrl: `https://www.bilibili.com/video/${v.bvid}`,
-      bvid: v.bvid,
-      playCount: v.stat?.view || 0,
-      isLiked: false,
-    }))
-    player.playAll(playlist)
+  const handlePlayAll = useCallback(() => {
+    const playlist = tracks.slice(0, 12).map(videoToTrack)
+    if (playlist.length > 0) player.playAll(playlist)
   }, [tracks, player])
 
   const handlePlayOne = useCallback((video: VideoInfo) => {
@@ -64,279 +63,70 @@ export default function Discover() {
 
   const featured = tracks.slice(0, 3)
   const list = tracks.slice(3)
+  const heroImage = featured[0]?.pic
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2xl)', paddingBottom: 'var(--space-2xl)' }}>
-      {/* Hero Banner */}
-      <div
-        style={{
-          height: 200,
-          borderRadius: 'var(--radius-xl)',
-          background: 'linear-gradient(135deg, rgba(251,114,153,0.45) 0%, rgba(136,71,255,0.35) 50%, rgba(0,174,236,0.3) 100%)',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'center',
-          padding: 'var(--space-2xl)',
-          color: '#fff',
-          position: 'relative',
-          overflow: 'hidden',
-        }}
-      >
-        <h1 style={{ fontFamily: 'var(--font-heading)', fontSize: 32, fontWeight: 700, lineHeight: 1.2, marginBottom: 6 }}>
-          发现音乐
-        </h1>
-        <p style={{ fontSize: 'var(--text-body)', opacity: 0.8, marginBottom: 'var(--space-md)' }}>
-          B站音乐区排行榜 · 发现好音乐
-        </p>
-        <button
-          onClick={handlePlayAll}
-          disabled={loading || tracks.length === 0}
-          style={{
-            padding: '10px 28px',
-            borderRadius: 'var(--radius-full)',
-            background: 'rgba(255,255,255,0.2)',
-            backdropFilter: 'blur(12px)',
-            border: '1px solid rgba(255,255,255,0.3)',
-            color: '#fff',
-            fontWeight: 600,
-            cursor: 'pointer',
-            width: 'fit-content',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            fontSize: 'var(--text-body)',
-            fontFamily: 'var(--font-body)',
-            transition: 'background var(--duration-fast)',
-            opacity: loading ? 0.6 : 1,
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.3)' }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.2)' }}
-        >
-          <Play size={16} fill="#fff" />
-          播放全部
-        </button>
-      </div>
+    <MusicPageShell>
+      <MusicHero
+        eyebrow="B站音乐区排行榜"
+        title="发现新声音"
+        subtitle="精选热门音乐投稿，用 Apple Music 式的节奏探索今天值得播放的内容。"
+        image={heroImage}
+        tone="pink"
+        action={(
+          <ActionButton onClick={handlePlayAll} disabled={loading || tracks.length === 0}>
+            <Play size={17} fill="currentColor" />
+            播放全部
+          </ActionButton>
+        )}
+      />
 
       {loading ? (
-        <div style={{ display: 'flex', justifyContent: 'center', padding: 'var(--space-3xl)', color: 'var(--color-muted)' }}>
-          <Loader2 size={28} style={{ animation: 'spin 1s linear infinite' }} />
-        </div>
+        <div className="am-loading"><Loader2 size={30} className="spin" /></div>
       ) : error ? (
-        <div style={{ textAlign: 'center', padding: 'var(--space-3xl)', color: 'var(--color-muted)' }}>
-          <p className="text-body">{error}</p>
-          <button
-            onClick={loadMusicRanking}
-            style={{ marginTop: 12, background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', fontFamily: 'var(--font-body)', fontSize: 'var(--text-body)' }}
-          >
-            重试
-          </button>
-        </div>
+        <EmptyLibrary
+          icon={<RefreshCw size={38} />}
+          title="加载失败"
+          subtitle={error}
+        />
       ) : (
         <>
-          {/* Featured Picks — 横向大卡片 */}
-          <Section title="精选推荐" icon={<TrendingUp size={18} />}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 'var(--space-md)' }}>
-              {featured.map((video) => (
-                <FeaturedCard
-                  key={video.bvid}
-                  video={video}
-                  isCurrent={player.currentTrack?.id === video.bvid}
-                  onPlay={() => handlePlayOne(video)}
-                />
-              ))}
-            </div>
-          </Section>
+          <MusicSection title="精选推荐" icon={<TrendingUp size={22} />}>
+            <FeaturedGrid>
+              {featured.map((video, index) => {
+                const track = videoToTrack(video)
+                return (
+                  <FeaturedTrackCard
+                    key={video.bvid}
+                    track={track}
+                    index={index + 1}
+                    isCurrent={player.currentTrack?.id === video.bvid}
+                    onPlay={() => handlePlayOne(video)}
+                  />
+                )
+              })}
+            </FeaturedGrid>
+          </MusicSection>
 
-          {/* Track List — 音乐列表 */}
-          <Section title="排行榜" icon={<Disc3 size={18} />}>
-            <div className="glass-panel" style={{ overflow: 'hidden' }}>
-              {list.map((video, index) => (
-                <TrackRow
-                  key={video.bvid}
-                  video={video}
-                  index={featured.length + index + 1}
-                  isCurrent={player.currentTrack?.id === video.bvid}
-                  onPlay={() => handlePlayOne(video)}
-                />
-              ))}
-            </div>
-          </Section>
+          <MusicSection title="热门排行榜" icon={<Disc3 size={22} />}>
+            <TrackList>
+              {list.map((video, index) => {
+                const track = videoToTrack(video)
+                return (
+                  <TrackListRow
+                    key={video.bvid}
+                    track={track}
+                    index={featured.length + index + 1}
+                    isCurrent={player.currentTrack?.id === video.bvid}
+                    isPlaying={player.isPlaying}
+                    onPlay={() => handlePlayOne(video)}
+                  />
+                )
+              })}
+            </TrackList>
+          </MusicSection>
         </>
       )}
-    </div>
+    </MusicPageShell>
   )
-}
-
-// ===== 精选大卡片 =====
-function FeaturedCard({ video, isCurrent, onPlay }: { video: VideoInfo; isCurrent: boolean; onPlay: () => void }) {
-  return (
-    <div
-      onClick={onPlay}
-      style={{
-        cursor: 'pointer',
-        borderRadius: 'var(--radius-lg)',
-        overflow: 'hidden',
-        background: 'var(--glass-bg)',
-        border: '1px solid var(--glass-border)',
-        transition: 'transform var(--duration-fast), box-shadow var(--duration-fast)',
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.transform = 'translateY(-2px)'
-        e.currentTarget.style.boxShadow = 'var(--shadow-md)'
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.transform = 'translateY(0)'
-        e.currentTarget.style.boxShadow = 'none'
-      }}
-    >
-      <div style={{ aspectRatio: '16/9', background: 'var(--color-border)', position: 'relative', overflow: 'hidden' }}>
-        {video.pic ? (
-          <img src={video.pic} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-        ) : (
-          <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Music size={28} style={{ color: 'var(--color-muted)' }} />
-          </div>
-        )}
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            background: 'rgba(0,0,0,0.25)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            opacity: 0,
-            transition: 'opacity var(--duration-fast)',
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.opacity = '1' }}
-          onMouseLeave={(e) => { e.currentTarget.style.opacity = '0' }}
-        >
-          <div style={{ width: 44, height: 44, borderRadius: 'var(--radius-full)', background: 'var(--color-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Play size={20} style={{ color: '#fff' }} fill="#fff" />
-          </div>
-        </div>
-        {video.duration > 0 && (
-          <span style={{ position: 'absolute', bottom: 8, right: 8, padding: '1px 6px', borderRadius: 4, background: 'rgba(0,0,0,0.55)', color: '#fff', fontSize: 11 }}>
-            {formatDuration(video.duration)}
-          </span>
-        )}
-      </div>
-      <div style={{ padding: 'var(--space-sm) var(--space-md)', display: 'flex', alignItems: 'center', gap: 8 }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div
-            className="text-body"
-            style={{
-              fontWeight: isCurrent ? 600 : 500,
-              color: isCurrent ? 'var(--color-primary)' : 'var(--color-foreground)',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {video.title}
-          </div>
-          <div className="text-caption" style={{ color: 'var(--color-muted)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {video.ownerName} · {formatCount(video.stat?.view || 0)}播放
-          </div>
-        </div>
-        <TrackActions track={videoToTrack(video)} size={15} />
-      </div>
-    </div>
-  )
-}
-
-// ===== 排行榜行 =====
-function TrackRow({ video, index, isCurrent, onPlay }: { video: VideoInfo; index: number; isCurrent: boolean; onPlay: () => void }) {
-  return (
-    <div
-      onClick={onPlay}
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 'var(--space-md)',
-        padding: 'var(--space-sm) var(--space-md)',
-        cursor: 'pointer',
-        transition: 'background var(--duration-fast)',
-        borderBottom: '1px solid var(--color-border)',
-      }}
-      onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-primary-light)' }}
-      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
-    >
-      {/* 序号 */}
-      <span
-        style={{
-          width: 28,
-          textAlign: 'center',
-          fontSize: 'var(--text-body)',
-          fontWeight: 600,
-          color: index <= 3 ? 'var(--color-primary)' : 'var(--color-muted)',
-          flexShrink: 0,
-        }}
-      >
-        {index}
-      </span>
-
-      {/* 封面 */}
-      <div style={{ width: 44, height: 44, borderRadius: 6, background: 'var(--color-border)', overflow: 'hidden', flexShrink: 0 }}>
-        {video.pic ? (
-          <img src={video.pic} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-        ) : (
-          <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Music size={16} style={{ color: 'var(--color-muted)' }} />
-          </div>
-        )}
-      </div>
-
-      {/* 信息 */}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div
-          className="text-body"
-          style={{
-            fontWeight: isCurrent ? 600 : 400,
-            color: isCurrent ? 'var(--color-primary)' : 'var(--color-foreground)',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {video.title}
-        </div>
-        <div className="text-caption" style={{ color: 'var(--color-muted)', marginTop: 1 }}>
-          {video.ownerName}
-        </div>
-      </div>
-
-      {/* 时长 */}
-      <span className="text-caption" style={{ color: 'var(--color-muted)', flexShrink: 0 }}>
-        {formatDuration(video.duration)}
-      </span>
-
-      {/* 行内操作 */}
-      <TrackActions track={videoToTrack(video)} size={15} />
-    </div>
-  )
-}
-
-function Section({ title, icon, children }: { title: string; icon?: React.ReactNode; children: React.ReactNode }) {
-  return (
-    <section>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 'var(--space-lg)' }}>
-        {icon && <span style={{ color: 'var(--color-primary)' }}>{icon}</span>}
-        <h2 className="text-h2" style={{ margin: 0 }}>{title}</h2>
-      </div>
-      {children}
-    </section>
-  )
-}
-
-function formatDuration(seconds: number): string {
-  if (!seconds) return '0:00'
-  const m = Math.floor(seconds / 60)
-  const s = Math.floor(seconds % 60)
-  return `${m}:${s.toString().padStart(2, '0')}`
-}
-
-function formatCount(n: number): string {
-  if (n >= 10000) return `${(n / 10000).toFixed(1)}万`
-  return String(n)
 }
