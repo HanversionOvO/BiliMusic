@@ -166,6 +166,14 @@ body {
   opacity: 0.8;
 }
 
+.sidebar-scroll {
+  scrollbar-width: none;
+}
+
+.sidebar-scroll::-webkit-scrollbar {
+  display: none;
+}
+
 /* ===== Glass Utilities ===== */
 
 .glass-panel {
