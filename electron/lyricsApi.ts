@@ -1,62 +1,81 @@
 import { ipcMain, net } from 'electron'
 
 /**
- * 歌词服务层（LRCLIB）
+ * 歌词服务层（OIAPI QQ Music Lyric）
  *
- * 为什么走主进程 net.fetch 而非渲染进程 fetch：
- * - 渲染进程 fetch 受 CORS 限制（dev 源 localhost:5173 / prod 源 file://），
- *   LRCLIB 不回 CORS 头会被拦；net.fetch 是 Node 侧请求，无 CORS。
- * - 还能设置 User-Agent / Lrclib-Client（浏览器 fetch 禁止改 UA）。
- *
- * 本层保持极薄：只做 LRCLIB 取数，清洗/排序/解析/缓存全部在渲染层
- * （src/services/lyrics.ts），便于单测与迭代。
+ * 主进程负责跨域请求，渲染层负责标题清洗、候选排序、LRC 解析与缓存。
+ * 接口文档：https://www.oiapi.net/doc/id/121.html
  */
 
-const LRCLIB = 'https://lrclib.net'
-const LRC_HEADERS = {
-  'User-Agent': 'biliMusic/1.0.0 (https://github.com/Hanversion/biliMusic)',
-  'Lrclib-Client': 'biliMusic v1.0.0',
-}
+const OIAPI_QQ_LYRIC = 'https://www.oiapi.net/api/QQMusicLyric'
 
-export interface LrclibRecord {
-  id: number
-  trackName: string
-  artistName: string
-  albumName: string
+export interface OiapiSong {
+  name: string
+  singer: string[]
+  album: string
+  mid: string
+  id: string | number
+  album_mid: string
   duration: number
-  instrumental: boolean
-  plainLyrics: string | null
-  syncedLyrics: string | null
+  image: string
 }
 
-export interface LyricsSearchQuery {
-  q?: string
-  trackName?: string
-  artistName?: string
+export interface OiapiLyricData {
+  content?: string
+  conteng?: string
+  base64?: string
+  cache?: boolean
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object'
+}
+
+async function fetchJson(url: string): Promise<any | null> {
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 9000)
+  try {
+    const resp = await net.fetch(url, { signal: ctrl.signal })
+    if (!resp.ok) return null
+    return await resp.json()
+  } catch {
+    return null
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 export function registerLyricsApiHandlers() {
-  // 搜索 → 候选列表（每条已含 synced/plain 歌词，无需二次请求）
-  // 支持自由文本 q，或结构化 trackName/artistName。
-  ipcMain.handle('lyrics:search', async (_event, query: LyricsSearchQuery): Promise<LrclibRecord[]> => {
-    const usp = new URLSearchParams()
-    if (query.q) usp.set('q', query.q)
-    if (query.trackName) usp.set('track_name', query.trackName)
-    if (query.artistName) usp.set('artist_name', query.artistName)
-    if (![...usp.keys()].length) return []
+  ipcMain.handle('lyrics:search', async (_event, keyword: string, page = 1, limit = 10): Promise<OiapiSong[]> => {
+    const q = String(keyword || '').trim()
+    if (!q) return []
 
-    // LRCLIB 对未命中查询响应较慢，加超时避免卡死
-    const ctrl = new AbortController()
-    const timer = setTimeout(() => ctrl.abort(), 8000)
-    try {
-      const resp = await net.fetch(`${LRCLIB}/api/search?${usp.toString()}`, { headers: LRC_HEADERS, signal: ctrl.signal })
-      if (!resp.ok) return []
-      const data = await resp.json()
-      return Array.isArray(data) ? (data as LrclibRecord[]) : []
-    } catch {
-      return []
-    } finally {
-      clearTimeout(timer)
-    }
+    const url = new URL(OIAPI_QQ_LYRIC)
+    url.searchParams.set('keyword', q)
+    url.searchParams.set('page', String(page))
+    url.searchParams.set('limit', String(limit))
+    url.searchParams.set('type', 'json')
+
+    const json = await fetchJson(url.toString())
+    const data = json?.data
+    if (!Array.isArray(data)) return []
+    return data.filter((item): item is OiapiSong => isObject(item) && typeof item.name === 'string')
+  })
+
+  ipcMain.handle('lyrics:get', async (_event, id: string | number, format = 'lrc'): Promise<OiapiLyricData | null> => {
+    const songId = String(id || '').trim()
+    if (!songId) return null
+
+    const url = new URL(OIAPI_QQ_LYRIC)
+    url.searchParams.set('id', songId)
+    url.searchParams.set('format', format)
+    url.searchParams.set('type', 'json')
+
+    const json = await fetchJson(url.toString())
+    if (!json || json.code !== 1) return null
+    if (typeof json.data === 'string') return { content: json.data }
+    if (isObject(json.data)) return json.data as OiapiLyricData
+    if (typeof json.message === 'string' && json.message.includes('[')) return { content: json.message }
+    return null
   })
 }

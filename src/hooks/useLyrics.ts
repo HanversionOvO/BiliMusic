@@ -6,7 +6,7 @@ import {
   chooseLyricCandidate,
   clearLyricCache,
   type LyricResult,
-  type LrclibRecord,
+  type LyricCandidate,
 } from '@/services/lyrics'
 
 export type LyricStatus = 'idle' | 'loading' | 'ok' | 'unsynced' | 'empty'
@@ -42,11 +42,17 @@ export function useLyrics(track: Track | null, enabled: boolean) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, track?.id])
 
-  const search = useCallback((q: string): Promise<LrclibRecord[]> => searchLyricCandidates(q), [])
+  const search = useCallback((q: string): Promise<LyricCandidate[]> => searchLyricCandidates(q), [])
 
-  const choose = useCallback((record: LrclibRecord) => {
+  const choose = useCallback(async (record: LyricCandidate) => {
     if (!track) return
-    const res = chooseLyricCandidate(track.id, record)
+    setStatus('loading')
+    const res = await chooseLyricCandidate(track.id, record)
+    if (!res) {
+      setStatus('empty')
+      setResult(null)
+      return
+    }
     setResult(res)
     setStatus(res.synced ? 'ok' : 'unsynced')
   }, [track])

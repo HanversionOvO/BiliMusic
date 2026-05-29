@@ -43,19 +43,27 @@ interface BiliApi {
   logout: () => Promise<{ success: boolean }>
 }
 
-export interface LrclibRecord {
-  id: number
-  trackName: string
-  artistName: string
-  albumName: string
+export interface OiapiSong {
+  name: string
+  singer: string[]
+  album: string
+  mid: string
+  id: string | number
+  album_mid: string
   duration: number
-  instrumental: boolean
-  plainLyrics: string | null
-  syncedLyrics: string | null
+  image: string
+}
+
+export interface OiapiLyricData {
+  content?: string
+  conteng?: string
+  base64?: string
+  cache?: boolean
 }
 
 interface LyricsApi {
-  search: (query: { q?: string; trackName?: string; artistName?: string }) => Promise<LrclibRecord[]>
+  search: (keyword: string, page?: number, limit?: number) => Promise<OiapiSong[]>
+  get: (id: string | number, format?: 'lrc' | 'qrc' | 'ksc') => Promise<OiapiLyricData | null>
 }
 
 declare global {

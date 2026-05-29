@@ -48,9 +48,13 @@ const biliApi = {
 }
 
 const lyricsApi = {
-  // 搜索歌词候选（每条已含 synced/plain 歌词）
-  search: (query) =>
-    ipcRenderer.invoke('lyrics:search', query),
+  // 搜索 QQ 音乐歌词候选
+  search: (keyword, page, limit) =>
+    ipcRenderer.invoke('lyrics:search', keyword, page, limit),
+
+  // 获取指定歌曲的 LRC 歌词
+  get: (id, format) =>
+    ipcRenderer.invoke('lyrics:get', id, format),
 }
 
 contextBridge.exposeInMainWorld('electronAPI', {

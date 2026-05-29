@@ -55,7 +55,7 @@ export default function LyricsView({ lines, currentTime, synced, onSeek }: Lyric
     return () => window.removeEventListener('resize', recompute)
   }, [posIndex, synced])
 
-  const fade = 'linear-gradient(to bottom, transparent 0%, #000 16%, #000 84%, transparent 100%)'
+  const fade = 'linear-gradient(to bottom, transparent 0%, #000 13%, #000 84%, transparent 100%)'
 
   // 无时间戳：静态可滚动列表
   if (!synced) {
@@ -70,18 +70,21 @@ export default function LyricsView({ lines, currentTime, synced, onSeek }: Lyric
         }}
       >
         {lines.map((l, i) => (
-          <p
+          <motion.p
             key={i}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.32, delay: Math.min(i * 0.018, 0.22) }}
             style={{
               fontSize: 'clamp(1.2rem, 1.6vw, 1.7rem)',
-              fontWeight: 600,
+              fontWeight: 720,
               lineHeight: 1.7,
-              color: 'rgba(255,255,255,0.7)',
+              color: 'rgba(255,255,255,0.72)',
               margin: '0 0 6px',
             }}
           >
             {l.text}
-          </p>
+          </motion.p>
         ))}
       </div>
     )
@@ -101,41 +104,58 @@ export default function LyricsView({ lines, currentTime, synced, onSeek }: Lyric
     >
       <motion.div
         animate={{ y }}
-        transition={{ type: 'spring', stiffness: 95, damping: 20, mass: 1 }}
+        transition={{ type: 'spring', stiffness: 118, damping: 23, mass: 0.9 }}
         style={{ position: 'absolute', left: 0, right: 0, top: 0 }}
       >
         {lines.map((l, i) => {
           const isActive = i === active
           const dist = Math.abs(i - posIndex)
+          const isNear = dist === 1
           return (
             <motion.div
               key={i}
               ref={(el) => { lineRefs.current[i] = el }}
               onClick={() => onSeek(l.time)}
               animate={{
-                opacity: isActive ? 1 : 0.3,
-                scale: isActive ? 1.06 : 1,
-                filter: isActive ? 'blur(0px)' : 'blur(1.4px)',
+                opacity: isActive ? 1 : isNear ? 0.46 : 0.22,
+                scale: isActive ? 1.075 : isNear ? 1.015 : 0.985,
+                x: isActive ? 14 : isNear ? 4 : 0,
+                filter: isActive ? 'blur(0px)' : isNear ? 'blur(0.5px)' : 'blur(1.5px)',
               }}
               transition={{
                 type: 'spring',
-                stiffness: 120,
-                damping: 22,
+                stiffness: 150,
+                damping: 24,
                 delay: Math.min(dist * 0.025, 0.18),
               }}
               style={{
                 transformOrigin: 'left center',
                 cursor: 'pointer',
                 color: '#fff',
-                fontSize: 'clamp(1.4rem, 2vw, 2.1rem)',
-                fontWeight: 700,
-                lineHeight: 1.45,
-                padding: '9px 8px',
+                fontSize: 'clamp(1.46rem, 2.4vw, 2.42rem)',
+                fontWeight: 820,
+                lineHeight: 1.38,
+                padding: '10px 8px',
                 margin: 0,
-                textShadow: isActive ? '0 4px 24px rgba(0,0,0,0.35)' : 'none',
+                textShadow: isActive ? '0 8px 34px rgba(0,0,0,0.44), 0 0 26px rgba(255,255,255,0.1)' : 'none',
               }}
             >
-              {l.text}
+              <span style={{ position: 'relative', display: 'inline-block' }}>
+                {isActive && (
+                  <motion.span
+                    layoutId="active-lyric-glow"
+                    style={{
+                      position: 'absolute',
+                      inset: '-8px -14px',
+                      borderRadius: 18,
+                      background: 'linear-gradient(90deg, rgba(255,55,95,0.22), rgba(255,255,255,0.06))',
+                      zIndex: -1,
+                    }}
+                    transition={{ type: 'spring', stiffness: 240, damping: 28 }}
+                  />
+                )}
+                {l.text}
+              </span>
             </motion.div>
           )
         })}

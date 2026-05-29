@@ -1,21 +1,24 @@
-import { useEffect, useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { useEffect, useState, type ReactNode } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 import {
   ChevronDown, Play, Pause, SkipBack, SkipForward, Shuffle, Repeat,
-  Heart, Volume2, VolumeX, Search, Music, Loader2, X,
+  Heart, Volume2, VolumeX, Search, Music, Loader2, X, Sparkles,
 } from 'lucide-react'
 import { usePlayer } from '@/contexts/PlayerContext'
 import { useNowPlaying } from '@/contexts/NowPlayingContext'
 import { useLyrics } from '@/hooks/useLyrics'
 import PlayerSlider from '@/components/PlayerSlider'
 import LyricsView from '@/components/LyricsView'
-import type { LrclibRecord } from '@/services/lyrics'
+import type { LyricCandidate } from '@/services/lyrics'
 
 const sliderTheme = {
-  ['--track-bg']: 'rgba(255,255,255,0.25)',
+  ['--track-bg']: 'rgba(255,255,255,0.18)',
   ['--track-fill']: '#ffffff',
   ['--track-thumb']: '#ffffff',
 } as React.CSSProperties
+
+const spring = { type: 'spring', stiffness: 360, damping: 32, mass: 0.75 } as const
+const noDrag = { WebkitAppRegion: 'no-drag' } as React.CSSProperties
 
 export default function NowPlaying() {
   const player = usePlayer()
@@ -24,7 +27,6 @@ export default function NowPlaying() {
   const lyrics = useLyrics(track, expanded)
   const duration = player.duration || track?.duration || 0
 
-  // Esc 收起
   useEffect(() => {
     if (!expanded) return
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close() }
@@ -37,90 +39,93 @@ export default function NowPlaying() {
       {expanded && track && (
         <motion.div
           key="now-playing"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.32, ease: [0.2, 0.8, 0.2, 1] }}
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 60,
-            background: '#0a0a0c',
-            color: '#fff',
-            display: 'flex',
-            flexDirection: 'column',
-            overflow: 'hidden',
-          }}
+          className="now-playing"
+          initial={{ opacity: 0, scale: 1.015 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.985 }}
+          transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
         >
-          {/* 流光背景：超大模糊封面 + 缓动 */}
-          {track.coverUrl && (
-            <motion.div
-              aria-hidden
-              initial={{ scale: 1.15, opacity: 0 }}
-              animate={{ scale: 1.25, opacity: 0.55 }}
-              transition={{ opacity: { duration: 0.8 }, scale: { duration: 18, repeat: Infinity, repeatType: 'reverse', ease: 'easeInOut' } }}
-              style={{
-                position: 'absolute', inset: '-15%',
-                backgroundImage: `url(${track.coverUrl})`,
-                backgroundSize: 'cover', backgroundPosition: 'center',
-                filter: 'blur(90px) saturate(1.7)',
-                pointerEvents: 'none',
-              }}
-            />
-          )}
-          {/* 暗角 + 渐变压暗，保证文字可读 */}
-          <div aria-hidden style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle at center, rgba(10,10,12,0.35) 0%, rgba(10,10,12,0.82) 100%)', pointerEvents: 'none' }} />
-
-          {/* 顶部条：可拖拽窗口 + 收起 */}
-          <div style={{ height: 48, display: 'flex', alignItems: 'center', padding: '0 14px', position: 'relative', zIndex: 3, WebkitAppRegion: 'drag' } as React.CSSProperties}>
-            <button
-              onClick={close}
-              title="收起 (Esc)"
-              style={{ ...noDrag, background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', width: 34, height: 34, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
-            >
-              <ChevronDown size={20} />
-            </button>
+          <div className="now-playing-bg">
+            {track.coverUrl && (
+              <>
+                <motion.div
+                  className="now-playing-bg__cover"
+                  style={{ backgroundImage: `url(${track.coverUrl})` }}
+                  initial={{ opacity: 0, scale: 1.12 }}
+                  animate={{ opacity: 0.72, scale: [1.16, 1.25, 1.18] }}
+                  transition={{ opacity: { duration: 0.8 }, scale: { duration: 22, repeat: Infinity, ease: 'easeInOut' } }}
+                />
+                <motion.div
+                  className="now-playing-bg__disc"
+                  style={{ backgroundImage: `url(${track.coverUrl})` }}
+                  animate={{ rotate: player.isPlaying ? 360 : 0 }}
+                  transition={{ duration: 34, repeat: player.isPlaying ? Infinity : 0, ease: 'linear' }}
+                />
+              </>
+            )}
           </div>
 
-          {/* 主体：左播放面板 + 右歌词 */}
-          <div style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'center', gap: '6%', padding: '0 6% 4%', maxWidth: 1500, margin: '0 auto', width: '100%', position: 'relative', zIndex: 1 }}>
-            {/* 左：播放器 */}
-            <div style={{ flex: '0 0 clamp(300px, 30vw, 400px)', maxWidth: 400, display: 'flex', flexDirection: 'column' }}>
-              <motion.img
-                layoutId="np-cover"
-                src={track.coverUrl}
-                alt={track.title}
-                transition={{ type: 'spring', stiffness: 300, damping: 32 }}
-                style={{ width: '100%', aspectRatio: '1 / 1', borderRadius: 16, objectFit: 'cover', boxShadow: '0 30px 60px rgba(0,0,0,0.55)', background: 'rgba(255,255,255,0.06)' }}
-              />
+          <header className="now-playing-top" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}>
+            <motion.button
+              type="button"
+              className="now-playing-close"
+              onClick={close}
+              title="收起 (Esc)"
+              style={noDrag}
+              whileHover={{ y: 1, backgroundColor: 'rgba(255,255,255,0.18)' }}
+              whileTap={{ scale: 0.92 }}
+            >
+              <ChevronDown size={21} />
+            </motion.button>
+            <div className="now-playing-top__center">
+              <Sparkles size={14} />
+              <span>Now Playing</span>
+            </div>
+          </header>
 
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginTop: 28 }}>
-                <div style={{ minWidth: 0, flex: 1 }}>
-                  <motion.div
-                    layoutId="np-title"
-                    transition={{ type: 'spring', stiffness: 300, damping: 32 }}
-                    style={{ fontSize: '1.6rem', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
-                  >
-                    {track.title}
-                  </motion.div>
-                  <motion.div
-                    layoutId="np-artist"
-                    transition={{ type: 'spring', stiffness: 300, damping: 32 }}
-                    style={{ fontSize: '1.05rem', fontWeight: 500, color: 'rgba(255,255,255,0.6)', marginTop: 6, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
-                  >
-                    {track.artist}
-                  </motion.div>
-                </div>
-                <button
-                  onClick={() => player.toggleLike(track.id)}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: track.isLiked ? 'var(--color-primary)' : 'rgba(255,255,255,0.7)', padding: 4, marginTop: 6, flexShrink: 0 }}
-                >
-                  <Heart size={22} fill={track.isLiked ? 'currentColor' : 'none'} />
-                </button>
+          <main className="now-playing-main">
+            <motion.section
+              className="now-playing-left"
+              initial={{ opacity: 0, y: 24 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ ...spring, delay: 0.08 }}
+            >
+              <div className="now-playing-cover-wrap">
+                <motion.div
+                  className="now-playing-cover-glow"
+                  animate={{ opacity: player.isPlaying ? [0.35, 0.72, 0.4] : 0.26 }}
+                  transition={{ duration: 3.8, repeat: Infinity, ease: 'easeInOut' }}
+                />
+                <motion.img
+                  key={track.id}
+                  layoutId="np-cover"
+                  className="now-playing-cover"
+                  src={track.coverUrl}
+                  alt={track.title}
+                  initial={{ opacity: 0, scale: 0.96, rotateX: 4 }}
+                  animate={{ opacity: 1, scale: 1, rotateX: 0 }}
+                  transition={spring}
+                />
               </div>
 
-              {/* 进度 */}
-              <div style={{ marginTop: 22, ...sliderTheme }}>
+              <div className="now-playing-meta">
+                <div className="now-playing-title-block">
+                  <motion.h1 layoutId="np-title" transition={spring}>{track.title}</motion.h1>
+                  <motion.p layoutId="np-artist" transition={spring}>{track.artist}</motion.p>
+                </div>
+                <motion.button
+                  type="button"
+                  className={`now-playing-heart ${track.isLiked ? 'is-liked' : ''}`}
+                  onClick={() => player.toggleLike(track.id)}
+                  whileHover={{ scale: 1.08 }}
+                  whileTap={{ scale: 0.88 }}
+                  title="喜欢"
+                >
+                  <Heart size={22} fill={track.isLiked ? 'currentColor' : 'none'} />
+                </motion.button>
+              </div>
+
+              <div className="now-playing-progress" style={sliderTheme}>
                 <PlayerSlider
                   ariaLabel="播放进度"
                   value={player.progress}
@@ -130,41 +135,51 @@ export default function NowPlaying() {
                   formatValue={formatTime}
                   variant="progress"
                 />
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 12, color: 'rgba(255,255,255,0.55)', fontVariantNumeric: 'tabular-nums' }}>
+                <div className="now-playing-time">
                   <span>{formatTime(player.progress)}</span>
                   <span>-{formatTime(Math.max(duration - player.progress, 0))}</span>
                 </div>
               </div>
 
-              {/* 控制 */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 24, padding: '0 6px' }}>
-                <IconBtn active={player.isShuffled} onClick={() => player.setIsShuffled(!player.isShuffled)}><Shuffle size={20} /></IconBtn>
-                <IconBtn onClick={player.prev}><SkipBack size={26} /></IconBtn>
-                <button
+              <div className="now-playing-controls">
+                <RoundIcon active={player.isShuffled} onClick={() => player.setIsShuffled(!player.isShuffled)} title="随机播放">
+                  <Shuffle size={20} />
+                </RoundIcon>
+                <RoundIcon onClick={player.prev} title="上一首">
+                  <SkipBack size={27} />
+                </RoundIcon>
+                <motion.button
+                  type="button"
+                  className="now-playing-play"
                   onClick={player.togglePlay}
                   disabled={player.loadingAudio}
-                  style={{ width: 64, height: 64, borderRadius: '50%', background: '#fff', color: '#0a0a0c', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: player.loadingAudio ? 'wait' : 'pointer', flexShrink: 0 }}
+                  whileHover={{ scale: player.loadingAudio ? 1 : 1.045 }}
+                  whileTap={{ scale: player.loadingAudio ? 1 : 0.94 }}
                 >
                   {player.loadingAudio
-                    ? <Loader2 size={26} style={{ animation: 'spin 0.8s linear infinite' }} />
-                    : player.isPlaying ? <Pause size={28} fill="currentColor" /> : <Play size={28} fill="currentColor" style={{ marginLeft: 3 }} />}
-                </button>
-                <IconBtn onClick={player.next}><SkipForward size={26} /></IconBtn>
-                <IconBtn
+                    ? <Loader2 size={27} className="spin" />
+                    : player.isPlaying ? <Pause size={30} fill="currentColor" /> : <Play size={30} fill="currentColor" style={{ marginLeft: 3 }} />}
+                </motion.button>
+                <RoundIcon onClick={player.next} title="下一首">
+                  <SkipForward size={27} />
+                </RoundIcon>
+                <RoundIcon
                   active={player.repeatMode !== 'none'}
                   onClick={() => {
                     const modes = ['none', 'all', 'one'] as const
                     player.setRepeatMode(modes[(modes.indexOf(player.repeatMode) + 1) % 3])
                   }}
+                  title="循环模式"
                 >
-                  <Repeat size={20} />
-                  {player.repeatMode === 'one' && <span style={{ position: 'absolute', fontSize: 9, fontWeight: 800, top: -4, right: -4 }}>1</span>}
-                </IconBtn>
+                  <span className="now-playing-repeat">
+                    <Repeat size={20} />
+                    {player.repeatMode === 'one' && <span>1</span>}
+                  </span>
+                </RoundIcon>
               </div>
 
-              {/* 音量 */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 22, color: 'rgba(255,255,255,0.6)', ...sliderTheme }}>
-                <button onClick={() => player.setIsMuted(!player.isMuted)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', padding: 0, display: 'flex' }}>
+              <div className="now-playing-volume" style={sliderTheme}>
+                <button type="button" onClick={() => player.setIsMuted(!player.isMuted)}>
                   {player.isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
                 </button>
                 <PlayerSlider
@@ -176,20 +191,22 @@ export default function NowPlaying() {
                   variant="volume"
                 />
               </div>
-            </div>
+            </motion.section>
 
-            {/* 右：歌词 */}
-            <div style={{ flex: 1, minWidth: 0, height: '78vh', display: 'flex', flexDirection: 'column' }}>
+            <motion.section
+              className="now-playing-lyrics-card"
+              initial={{ opacity: 0, x: 34 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ ...spring, delay: 0.16 }}
+            >
               <LyricsPanel lyrics={lyrics} track={track} onSeek={player.setProgress} currentTime={player.progress} />
-            </div>
-          </div>
+            </motion.section>
+          </main>
         </motion.div>
       )}
     </AnimatePresence>
   )
 }
-
-// ===== 歌词面板（含状态 + 手动纠正）=====
 
 function LyricsPanel({
   lyrics, track, onSeek, currentTime,
@@ -202,133 +219,132 @@ function LyricsPanel({
   const { status, result, search, choose, retry } = lyrics
   const [searchOpen, setSearchOpen] = useState(false)
   const [query, setQuery] = useState('')
-  const [results, setResults] = useState<LrclibRecord[]>([])
+  const [results, setResults] = useState<LyricCandidate[]>([])
   const [searching, setSearching] = useState(false)
+  const [choosingId, setChoosingId] = useState<string | null>(null)
 
   const openSearch = () => {
     setQuery(`${track.title} ${track.artist}`.trim())
     setResults([])
     setSearchOpen(true)
   }
+
   const doSearch = async () => {
+    if (!query.trim()) return
     setSearching(true)
     const r = await search(query)
     setResults(r)
     setSearching(false)
   }
 
+  const pick = async (record: LyricCandidate) => {
+    setChoosingId(record.id)
+    await choose(record)
+    setChoosingId(null)
+    setSearchOpen(false)
+  }
+
   return (
-    <div style={{ position: 'relative', height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* 顶部小工具条 */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4, minHeight: 28 }}>
-        {(status === 'ok' || status === 'unsynced') && (
-          <button onClick={openSearch} style={pillBtn}>
-            <Search size={13} /> 歌词不对？
-          </button>
-        )}
+    <div className="lyrics-panel">
+      <div className="lyrics-panel__top">
+        <div>
+          <p>Lyrics</p>
+          <h2>{result ? `${result.trackName} - ${result.artistName}` : '歌词'}</h2>
+        </div>
+        <button type="button" onClick={openSearch}>
+          <Search size={14} />
+          歌词不对？
+        </button>
       </div>
 
-      {/* 主体 */}
-      <div style={{ flex: 1, minHeight: 0 }}>
+      <div className="lyrics-panel__body">
         {status === 'loading' && (
-          <Centered><Loader2 size={26} style={{ animation: 'spin 0.8s linear infinite' }} /><span style={{ marginTop: 12 }}>匹配歌词中…</span></Centered>
+          <Centered>
+            <Loader2 size={28} className="spin" />
+            <span>匹配歌词中...</span>
+          </Centered>
         )}
         {status === 'empty' && (
           <Centered>
-            <Music size={40} strokeWidth={1.2} style={{ opacity: 0.6 }} />
-            <span style={{ marginTop: 14, fontSize: 16 }}>暂无歌词</span>
-            <span style={{ marginTop: 4, fontSize: 13, color: 'rgba(255,255,255,0.45)' }}>这首歌在歌词库里没找到</span>
-            <button onClick={openSearch} style={{ ...pillBtn, marginTop: 16 }}><Search size={14} /> 手动搜索歌词</button>
+            <Music size={42} strokeWidth={1.25} />
+            <strong>暂无歌词</strong>
+            <span>这首歌在歌词库里还没有匹配到</span>
+            <button type="button" onClick={openSearch}><Search size={14} /> 手动搜索歌词</button>
           </Centered>
         )}
         {(status === 'ok' || status === 'unsynced') && result && (
           <>
-            {status === 'unsynced' && (
-              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', marginBottom: 6 }}>· 该版本无逐行时间轴，按普通歌词显示 ·</div>
-            )}
-            <div style={{ height: status === 'unsynced' ? 'calc(100% - 24px)' : '100%' }}>
-              <LyricsView lines={result.lines} currentTime={currentTime} synced={result.synced} onSeek={onSeek} />
-            </div>
+            {status === 'unsynced' && <div className="lyrics-panel__hint">该版本无逐行时间轴，按普通歌词显示</div>}
+            <LyricsView lines={result.lines} currentTime={currentTime} synced={result.synced} onSeek={onSeek} />
           </>
         )}
       </div>
 
-      {/* 手动纠正抽屉 */}
-      {searchOpen && (
-        <div style={{ position: 'absolute', inset: 0, background: 'rgba(12,12,14,0.92)', backdropFilter: 'blur(12px)', borderRadius: 12, padding: 16, display: 'flex', flexDirection: 'column', zIndex: 5 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-            <span style={{ fontSize: 15, fontWeight: 600 }}>手动匹配歌词</span>
-            <button onClick={() => setSearchOpen(false)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.6)', cursor: 'pointer', display: 'flex' }}><X size={18} /></button>
-          </div>
-          <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') doSearch() }}
-              placeholder="歌名 歌手"
-              autoFocus
-              style={{ flex: 1, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, padding: '8px 12px', color: '#fff', fontSize: 14, outline: 'none' }}
-            />
-            <button onClick={doSearch} disabled={searching} style={{ ...pillBtn, padding: '8px 16px' }}>
-              {searching ? <Loader2 size={14} style={{ animation: 'spin 0.8s linear infinite' }} /> : <Search size={14} />} 搜索
-            </button>
-          </div>
-          <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {results.length === 0 && !searching && (
-              <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13, textAlign: 'center', marginTop: 24 }}>输入歌名/歌手后搜索</div>
-            )}
-            {results.map((r) => (
-              <button
-                key={r.id}
-                onClick={() => { choose(r); setSearchOpen(false) }}
-                style={{ textAlign: 'left', background: 'rgba(255,255,255,0.05)', border: 'none', borderRadius: 8, padding: '10px 12px', color: '#fff', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.12)' }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
-              >
-                <span style={{ minWidth: 0 }}>
-                  <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 14 }}>{r.trackName}</span>
-                  <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>{r.artistName} · {formatTime(r.duration)}</span>
-                </span>
-                <span style={{ flexShrink: 0, fontSize: 11, color: r.syncedLyrics ? '#4ade80' : 'rgba(255,255,255,0.4)' }}>
-                  {r.syncedLyrics ? '同步' : r.plainLyrics ? '纯文本' : '无'}
-                </span>
+      <AnimatePresence>
+        {searchOpen && (
+          <motion.div
+            className="lyrics-drawer"
+            initial={{ opacity: 0, y: 18, scale: 0.985 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 18, scale: 0.985 }}
+            transition={spring}
+          >
+            <div className="lyrics-drawer__head">
+              <span>手动匹配歌词</span>
+              <button type="button" onClick={() => setSearchOpen(false)}><X size={18} /></button>
+            </div>
+            <div className="lyrics-drawer__search">
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') doSearch() }}
+                placeholder="歌名 歌手"
+                autoFocus
+              />
+              <button type="button" onClick={doSearch} disabled={searching}>
+                {searching ? <Loader2 size={15} className="spin" /> : <Search size={15} />}
+                搜索
               </button>
-            ))}
-          </div>
-          <button onClick={() => { retry(); setSearchOpen(false) }} style={{ ...pillBtn, marginTop: 12, justifyContent: 'center' }}>重新自动匹配</button>
-        </div>
-      )}
+            </div>
+            <div className="lyrics-drawer__list">
+              {results.length === 0 && !searching && <div className="lyrics-drawer__empty">输入歌名或歌手后搜索</div>}
+              {results.map((r) => (
+                <button key={r.id} type="button" className="lyrics-candidate" onClick={() => pick(r)} disabled={choosingId === r.id}>
+                  <span>
+                    <strong>{r.trackName}</strong>
+                    <small>{r.artistName} · {r.albumName || 'QQ Music'} · {formatTime(r.duration)}</small>
+                  </span>
+                  {choosingId === r.id ? <Loader2 size={16} className="spin" /> : <span>选择</span>}
+                </button>
+              ))}
+            </div>
+            <button type="button" className="lyrics-drawer__retry" onClick={() => { retry(); setSearchOpen(false) }}>
+              重新自动匹配
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
 
-// ===== 小组件/样式 =====
-
-function IconBtn({ children, active, onClick }: { children: React.ReactNode; active?: boolean; onClick: () => void }) {
+function RoundIcon({ children, active, onClick, title }: { children: ReactNode; active?: boolean; onClick: () => void; title: string }) {
   return (
-    <button
+    <motion.button
+      type="button"
+      className={`now-playing-round ${active ? 'is-active' : ''}`}
       onClick={onClick}
-      style={{ position: 'relative', background: 'none', border: 'none', cursor: 'pointer', color: active ? 'var(--color-primary)' : 'rgba(255,255,255,0.85)', padding: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      title={title}
+      whileHover={{ scale: 1.08, y: -1 }}
+      whileTap={{ scale: 0.9 }}
     >
       {children}
-    </button>
+    </motion.button>
   )
 }
 
-function Centered({ children }: { children: React.ReactNode }) {
-  return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.8)' }}>
-      {children}
-    </div>
-  )
-}
-
-const noDrag = { WebkitAppRegion: 'no-drag' } as React.CSSProperties
-
-const pillBtn: React.CSSProperties = {
-  display: 'inline-flex', alignItems: 'center', gap: 6,
-  background: 'rgba(255,255,255,0.12)', border: 'none', borderRadius: 9999,
-  color: '#fff', fontSize: 13, padding: '6px 12px', cursor: 'pointer',
+function Centered({ children }: { children: ReactNode }) {
+  return <div className="lyrics-centered">{children}</div>
 }
 
 function formatTime(seconds: number): string {
