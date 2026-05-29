@@ -1,4 +1,5 @@
 .claude
+.codex
 .workflow
 design-system
 dist
@@ -7,4 +8,3 @@ node_modules
 
 dev.log
 package-lock.json
-

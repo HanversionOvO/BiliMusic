@@ -1,6 +1,7 @@
 import { Heart, Music } from 'lucide-react'
 import { useState, useCallback } from 'react'
 import { usePlayer } from '@/contexts/PlayerContext'
+import TrackActions from '@/components/TrackActions'
 import { loadFavoriteTracks, saveFavoriteTracks } from '@/utils/storage'
 import type { Track } from '@/types'
 
@@ -37,7 +38,7 @@ export default function Favorites() {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           {tracks.map((track, i) => (
-            <div key={track.id + String(i)} onClick={() => player.play(track)}
+            <div key={track.id + String(i)} onClick={() => player.playNow(track)}
               style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)', padding: '10px var(--space-md)', cursor: 'pointer', borderRadius: 'var(--radius-md)', transition: 'background var(--duration-fast)', background: player.currentTrack?.id === track.id ? 'var(--color-primary-light)' : undefined }}
               onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-primary-light)' }}
               onMouseLeave={e => { if (player.currentTrack?.id !== track.id) e.currentTarget.style.background = 'transparent' }}
@@ -51,7 +52,9 @@ export default function Favorites() {
                 <div className="text-caption" style={{ color: 'var(--color-muted)' }}>{track.artist}</div>
               </div>
               <span className="text-caption" style={{ color: 'var(--color-muted)', marginRight: 8 }}>{fmt(track.duration)}</span>
+              <TrackActions track={track} size={15} />
               <button onClick={e => { e.stopPropagation(); handleRemove(track.id) }}
+                title="取消收藏"
                 style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-destructive)', padding: 4 }}>
                 <Heart size={14} fill="currentColor" />
               </button>

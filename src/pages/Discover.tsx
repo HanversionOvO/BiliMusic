@@ -1,8 +1,23 @@
 import { useEffect, useState, useCallback } from 'react'
 import { Play, Music, Loader2, TrendingUp, Disc3 } from 'lucide-react'
 import { usePlayer } from '@/contexts/PlayerContext'
-import { getMusicRanking, extractAudio, type VideoInfo } from '@/services/api'
+import TrackActions from '@/components/TrackActions'
+import { getMusicRanking, type VideoInfo } from '@/services/api'
 import type { Track } from '@/types'
+
+function videoToTrack(video: VideoInfo): Track {
+  return {
+    id: video.bvid,
+    title: video.title,
+    artist: video.ownerName,
+    coverUrl: video.pic,
+    duration: video.duration,
+    videoUrl: `https://www.bilibili.com/video/${video.bvid}`,
+    bvid: video.bvid,
+    playCount: video.stat?.view || 0,
+    isLiked: false,
+  }
+}
 
 export default function Discover() {
   const [tracks, setTracks] = useState<VideoInfo[]>([])
@@ -43,35 +58,8 @@ export default function Discover() {
     player.playAll(playlist)
   }, [tracks, player])
 
-  const handlePlayOne = useCallback(async (video: VideoInfo) => {
-    try {
-      const trackSource = await extractAudio(video.bvid)
-      const track: Track = {
-        id: trackSource.bvid,
-        title: trackSource.title,
-        artist: trackSource.artist,
-        coverUrl: trackSource.coverUrl,
-        duration: trackSource.duration,
-        videoUrl: `https://www.bilibili.com/video/${trackSource.bvid}`,
-        bvid: trackSource.bvid,
-        playCount: 0,
-        isLiked: false,
-      }
-      player.play(track)
-    } catch {
-      const track: Track = {
-        id: video.bvid,
-        title: video.title,
-        artist: video.ownerName,
-        coverUrl: video.pic,
-        duration: video.duration,
-        videoUrl: `https://www.bilibili.com/video/${video.bvid}`,
-        bvid: video.bvid,
-        playCount: video.stat?.view || 0,
-        isLiked: false,
-      }
-      player.play(track)
-    }
+  const handlePlayOne = useCallback((video: VideoInfo) => {
+    player.playNow(videoToTrack(video))
   }, [player])
 
   const featured = tracks.slice(0, 3)
@@ -233,22 +221,25 @@ function FeaturedCard({ video, isCurrent, onPlay }: { video: VideoInfo; isCurren
           </span>
         )}
       </div>
-      <div style={{ padding: 'var(--space-sm) var(--space-md)' }}>
-        <div
-          className="text-body"
-          style={{
-            fontWeight: isCurrent ? 600 : 500,
-            color: isCurrent ? 'var(--color-primary)' : 'var(--color-foreground)',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {video.title}
+      <div style={{ padding: 'var(--space-sm) var(--space-md)', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div
+            className="text-body"
+            style={{
+              fontWeight: isCurrent ? 600 : 500,
+              color: isCurrent ? 'var(--color-primary)' : 'var(--color-foreground)',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {video.title}
+          </div>
+          <div className="text-caption" style={{ color: 'var(--color-muted)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {video.ownerName} · {formatCount(video.stat?.view || 0)}播放
+          </div>
         </div>
-        <div className="text-caption" style={{ color: 'var(--color-muted)', marginTop: 2 }}>
-          {video.ownerName} · {formatCount(video.stat?.view || 0)}播放
-        </div>
+        <TrackActions track={videoToTrack(video)} size={15} />
       </div>
     </div>
   )
@@ -319,6 +310,9 @@ function TrackRow({ video, index, isCurrent, onPlay }: { video: VideoInfo; index
       <span className="text-caption" style={{ color: 'var(--color-muted)', flexShrink: 0 }}>
         {formatDuration(video.duration)}
       </span>
+
+      {/* 行内操作 */}
+      <TrackActions track={videoToTrack(video)} size={15} />
     </div>
   )
 }

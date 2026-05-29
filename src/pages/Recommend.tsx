@@ -1,7 +1,8 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Play, Music, Loader2, Sparkles, Flame, Loader } from 'lucide-react'
+import { Play, Music, Loader2, Sparkles, Flame } from 'lucide-react'
 import { usePlayer } from '@/contexts/PlayerContext'
-import { getMusicCenterRank, getNewSongs, extractAudio, type MusicSong } from '@/services/api'
+import TrackActions from '@/components/TrackActions'
+import { getMusicCenterRank, getNewSongs, type MusicSong } from '@/services/api'
 import type { Track } from '@/types'
 
 function songToTrack(s: MusicSong): Track {
@@ -13,6 +14,8 @@ function songToTrack(s: MusicSong): Track {
     duration: 0,
     videoUrl: `https://www.bilibili.com/video/${s.bvid}`,
     bvid: s.bvid,
+    aid: s.aid,
+    cid: s.cid,
     playCount: 0,
     isLiked: false,
   }
@@ -23,7 +26,6 @@ export default function Recommend() {
   const [newSongs, setNewSongs] = useState<MusicSong[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [extractingBvid, setExtractingBvid] = useState<string | null>(null)
   const player = usePlayer()
 
   useEffect(() => {
@@ -48,26 +50,8 @@ export default function Recommend() {
     setLoading(false)
   }
 
-  const handlePlay = useCallback(async (song: MusicSong) => {
-    setExtractingBvid(song.bvid)
-    try {
-      const ts = await extractAudio(song.bvid)
-      player.play({
-        id: ts.bvid,
-        title: ts.title,
-        artist: ts.artist,
-        coverUrl: ts.coverUrl || song.coverUrl,
-        duration: ts.duration,
-        videoUrl: `https://www.bilibili.com/video/${ts.bvid}`,
-        bvid: ts.bvid,
-        playCount: 0,
-        isLiked: false,
-      })
-    } catch {
-      player.play(songToTrack(song))
-    } finally {
-      setExtractingBvid(null)
-    }
+  const handlePlay = useCallback((song: MusicSong) => {
+    player.playNow(songToTrack(song))
   }, [player])
 
   const handlePlayAll = useCallback((songs: MusicSong[]) => {
@@ -123,7 +107,6 @@ export default function Recommend() {
                   song={song}
                   index={index + 1}
                   isCurrent={player.currentTrack?.id === song.bvid}
-                  isExtracting={extractingBvid === song.bvid}
                   onPlay={() => handlePlay(song)}
                 />
               ))}
@@ -144,7 +127,6 @@ export default function Recommend() {
                   key={song.bvid}
                   song={song}
                   isCurrent={player.currentTrack?.id === song.bvid}
-                  isExtracting={extractingBvid === song.bvid}
                   onPlay={() => handlePlay(song)}
                 />
               ))}
@@ -157,7 +139,7 @@ export default function Recommend() {
 }
 
 // ===== 榜单行 =====
-function SongRow({ song, index, isCurrent, isExtracting, onPlay }: { song: MusicSong; index: number; isCurrent: boolean; isExtracting: boolean; onPlay: () => void }) {
+function SongRow({ song, index, isCurrent, onPlay }: { song: MusicSong; index: number; isCurrent: boolean; onPlay: () => void }) {
   return (
     <div
       onClick={onPlay}
@@ -181,11 +163,6 @@ function SongRow({ song, index, isCurrent, isExtracting, onPlay }: { song: Music
             <Music size={16} style={{ color: 'var(--color-muted)' }} />
           </div>
         )}
-        {isExtracting && (
-          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Loader size={16} style={{ color: '#fff', animation: 'spin 1s linear infinite' }} />
-          </div>
-        )}
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div className="text-body" style={{ fontWeight: isCurrent ? 600 : 400, color: isCurrent ? 'var(--color-primary)' : 'var(--color-foreground)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -195,12 +172,13 @@ function SongRow({ song, index, isCurrent, isExtracting, onPlay }: { song: Music
           {song.artist}{song.album ? ` · ${song.album}` : ''}
         </div>
       </div>
+      <TrackActions track={songToTrack(song)} size={15} />
     </div>
   )
 }
 
 // ===== 新歌卡片 =====
-function SongCard({ song, isCurrent, isExtracting, onPlay }: { song: MusicSong; isCurrent: boolean; isExtracting: boolean; onPlay: () => void }) {
+function SongCard({ song, isCurrent, onPlay }: { song: MusicSong; isCurrent: boolean; onPlay: () => void }) {
   return (
     <div
       onClick={onPlay}
@@ -221,16 +199,12 @@ function SongCard({ song, isCurrent, isExtracting, onPlay }: { song: MusicSong; 
           </div>
         )}
         <div
-          style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: isExtracting ? 1 : 0, transition: 'opacity var(--duration-fast)' }}
+          style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0, transition: 'opacity var(--duration-fast)' }}
           onMouseEnter={(e) => { e.currentTarget.style.opacity = '1' }}
-          onMouseLeave={(e) => { if (!isExtracting) e.currentTarget.style.opacity = '0' }}
+          onMouseLeave={(e) => { e.currentTarget.style.opacity = '0' }}
         >
           <div style={{ width: 44, height: 44, borderRadius: 'var(--radius-full)', background: 'var(--color-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            {isExtracting ? (
-              <Loader size={20} style={{ color: '#fff', animation: 'spin 1s linear infinite' }} />
-            ) : (
-              <Play size={20} style={{ color: '#fff' }} fill="#fff" />
-            )}
+            <Play size={20} style={{ color: '#fff' }} fill="#fff" />
           </div>
         </div>
         {song.publishTime && (
@@ -239,13 +213,16 @@ function SongCard({ song, isCurrent, isExtracting, onPlay }: { song: MusicSong; 
           </span>
         )}
       </div>
-      <div style={{ padding: 'var(--space-sm) var(--space-md)' }}>
-        <div className="text-body" style={{ fontWeight: isCurrent ? 600 : 500, color: isCurrent ? 'var(--color-primary)' : 'var(--color-foreground)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {song.title}
+      <div style={{ padding: 'var(--space-sm) var(--space-md)', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="text-body" style={{ fontWeight: isCurrent ? 600 : 500, color: isCurrent ? 'var(--color-primary)' : 'var(--color-foreground)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {song.title}
+          </div>
+          <div className="text-caption" style={{ color: 'var(--color-muted)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {song.artist}
+          </div>
         </div>
-        <div className="text-caption" style={{ color: 'var(--color-muted)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {song.artist}
-        </div>
+        <TrackActions track={songToTrack(song)} size={15} />
       </div>
     </div>
   )

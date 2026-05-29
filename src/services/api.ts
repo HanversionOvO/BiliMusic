@@ -113,10 +113,13 @@ export async function getVideoDetail(bvid: string): Promise<VideoInfo> {
 
 // ===== 提取音频 =====
 
-export async function extractAudio(bvid: string): Promise<TrackSource> {
+export async function extractAudio(
+  bvid: string,
+  fallback?: { aid?: string | number; cid?: string | number },
+): Promise<TrackSource> {
   // 统一走渲染进程浏览器 fetch：主进程 net.fetch 会被 B站反爬拦截（-352）
   const { extractAudioFromVideo } = await import('@/services/bilibiliApi')
-  return extractAudioFromVideo(bvid)
+  return extractAudioFromVideo(bvid, fallback)
 }
 
 // ===== 下载音频 =====
@@ -178,6 +181,7 @@ export async function getMusicRanking(): Promise<VideoInfo[]> {
 
 export interface MusicSong {
   bvid: string
+  aid: string
   cid: string
   title: string
   artist: string
@@ -186,9 +190,17 @@ export interface MusicSong {
   publishTime?: string
 }
 
+// 综合榜顶层 bvid 是 music-metadata 伪 id（/x/web-interface/view 返回 -404），
+// 实际可播放稿件在 related_archive.bvid；新歌无 related_archive，用顶层 bvid。
+function playableBvid(x: import('@/services/bilibiliApi').MusicCenterItem): string {
+  return x.related_archive?.bvid || x.bvid
+}
+
 function mapMusicSong(x: import('@/services/bilibiliApi').MusicCenterItem): MusicSong {
   return {
-    bvid: x.bvid,
+    bvid: playableBvid(x),
+    // 顶层 avid+cid：bvid 稿件 -404 时的回退音源（related_archive.cid 不可靠）
+    aid: String(x.aid || ''),
     cid: String(x.cid || ''),
     title: x.music_title,
     artist: x.author,
@@ -202,7 +214,7 @@ function mapMusicSong(x: import('@/services/bilibiliApi').MusicCenterItem): Musi
 export async function getMusicCenterRank(ps = 30): Promise<MusicSong[]> {
   const { getMusicComprehensiveRank } = await import('@/services/bilibiliApi')
   const list = await getMusicComprehensiveRank(ps)
-  return list.filter((x) => x.bvid).map(mapMusicSong)
+  return list.filter((x) => playableBvid(x)).map(mapMusicSong)
 }
 
 // 新歌速递
@@ -210,6 +222,67 @@ export async function getNewSongs(): Promise<MusicSong[]> {
   const { getNewMusic } = await import('@/services/bilibiliApi')
   const list = await getNewMusic()
   return list.filter((x) => x.bvid).map(mapMusicSong)
+}
+
+// ===== 搜索 UP主 =====
+
+export interface UserResult {
+  mid: number
+  name: string
+  avatar: string
+  sign: string
+  fans: number
+  videoCount: number
+  level: number
+}
+
+export async function searchUsers(keyword: string, page = 1, pageSize = 20): Promise<{ items: UserResult[]; totalPages: number; totalResults: number }> {
+  const { searchUser } = await import('@/services/bilibiliApi')
+  const data = await searchUser(keyword, page, pageSize)
+  const items = (data.result || []).map((u) => ({
+    mid: u.mid,
+    name: u.uname?.replace(/<[^>]+>/g, '') || '',
+    avatar: normalizePic(u.upic),
+    sign: u.usign || '',
+    fans: u.fans || 0,
+    videoCount: u.videos || 0,
+    level: u.level || 0,
+  }))
+  return { items, totalPages: data.numPages || 0, totalResults: data.numResults || 0 }
+}
+
+// ===== UP主 投稿视频 =====
+
+export interface UpVideo {
+  bvid: string
+  title: string
+  coverUrl: string
+  duration: number
+  play: number
+  created: number
+}
+
+// "mm:ss" / "hh:mm:ss" → 秒
+function parseLength(len: string): number {
+  if (!len) return 0
+  const parts = len.split(':').map(Number)
+  if (parts.length === 2) return parts[0] * 60 + parts[1]
+  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2]
+  return 0
+}
+
+export async function getUserVideos(mid: number, page = 1, pageSize = 30): Promise<{ items: UpVideo[]; total: number }> {
+  const { getUserVideos: rendererUserVideos } = await import('@/services/bilibiliApi')
+  const data = await rendererUserVideos(mid, page, pageSize)
+  const items = (data.list?.vlist || []).map((v) => ({
+    bvid: v.bvid,
+    title: v.title?.replace(/<[^>]+>/g, '') || '',
+    coverUrl: normalizePic(v.pic),
+    duration: parseLength(v.length),
+    play: v.play || 0,
+    created: v.created || 0,
+  }))
+  return { items, total: data.page?.count || 0 }
 }
 
 // ===== 个性化推荐 =====

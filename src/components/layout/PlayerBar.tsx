@@ -12,10 +12,13 @@ import {
   Mic,
   Music,
 } from 'lucide-react'
+import { useState } from 'react'
 import { usePlayer } from '@/contexts/PlayerContext'
+import PlayQueue from '@/components/PlayQueue'
 
 export default function PlayerBar() {
   const player = usePlayer()
+  const [queueOpen, setQueueOpen] = useState(false)
 
   return (
     <div
@@ -252,13 +255,48 @@ export default function PlayerBar() {
             }}
           />
         </div>
-        <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-muted-foreground)', padding: 4 }}>
+        <button
+          onClick={() => setQueueOpen(o => !o)}
+          title="播放队列"
+          style={{
+            position: 'relative',
+            background: 'none',
+            border: 'none',
+            cursor: 'pointer',
+            color: queueOpen ? 'var(--color-primary)' : 'var(--color-muted-foreground)',
+            padding: 4,
+            transition: 'color var(--duration-fast)',
+          }}
+        >
           <ListMusic size={18} />
+          {player.queue.length > 0 && (
+            <span
+              style={{
+                position: 'absolute',
+                top: -2,
+                right: -2,
+                minWidth: 15,
+                height: 15,
+                padding: '0 3px',
+                borderRadius: 'var(--radius-full)',
+                background: 'var(--color-primary)',
+                color: 'var(--color-on-primary)',
+                fontSize: 9,
+                fontWeight: 700,
+                lineHeight: '15px',
+                textAlign: 'center',
+              }}
+            >
+              {player.queue.length}
+            </span>
+          )}
         </button>
         <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-muted-foreground)', padding: 4 }}>
           <Mic size={18} />
         </button>
       </div>
+
+      <PlayQueue open={queueOpen} onClose={() => setQueueOpen(false)} />
     </div>
   )
 }

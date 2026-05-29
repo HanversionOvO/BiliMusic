@@ -30,6 +30,10 @@ interface PlayerActions {
   addToQueue: (track: Track) => void
   addTracksToQueue: (tracks: Track[]) => void
   removeFromQueue: (trackId: string) => void
+  removeMultipleFromQueue: (trackIds: string[]) => void
+  moveInQueue: (fromIndex: number, toIndex: number) => void
+  playNow: (track: Track) => void
+  playNext: (track: Track) => void
   clearQueue: () => void
   toggleLike: (trackId: string) => void
   playAll: (tracks: Track[]) => void
@@ -63,10 +67,18 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const [isShuffled, setIsShuffled] = useState(false)
   const [queue, setQueue] = useState<Track[]>([])
   const [loadingAudio, setLoadingAudio] = useState(false)
+  const [toast, setToast] = useState<string | null>(null)
 
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const shuffledQueueRef = useRef<Track[]>([])
   const currentIndexRef = useRef(-1)
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+
+  const showToast = useCallback((msg: string) => {
+    setToast(msg)
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+    toastTimerRef.current = setTimeout(() => setToast(null), 2000)
+  }, [])
 
   // 初始化 audio 元素
   useEffect(() => {
@@ -153,7 +165,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     async function loadAndPlay() {
       setLoadingAudio(true)
       try {
-        const source = await extractAudio(currentTrack!.bvid || currentTrack!.id)
+        const fallback = currentTrack!.aid && currentTrack!.cid
+          ? { aid: currentTrack!.aid, cid: currentTrack!.cid }
+          : undefined
+        const source = await extractAudio(currentTrack!.bvid || currentTrack!.id, fallback)
         if (cancelled) return
         audio.src = source.audioUrl
         audio.currentTime = 0
@@ -246,6 +261,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const addToQueue = useCallback((track: Track) => {
+    const exists = queue.some(t => t.id === track.id)
     setQueue(prev => {
       if (prev.some(t => t.id === track.id)) return prev
       const newQueue = [...prev, track]
@@ -255,7 +271,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       }
       return newQueue
     })
-  }, [currentTrack])
+    showToast(exists ? '已在播放列表中' : '已加入播放列表')
+  }, [queue, currentTrack, showToast])
 
   const addTracksToQueue = useCallback((tracks: Track[]) => {
     setQueue(prev => {
@@ -270,9 +287,67 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     })
   }, [currentTrack])
 
+  // 队列变更后把 currentIndexRef 重新对齐到当前曲目（避免 next/prev 错位）
+  const resyncIndex = useCallback((nextQueue: Track[]) => {
+    const curId = currentTrack?.id
+    if (curId) currentIndexRef.current = nextQueue.findIndex(t => t.id === curId)
+  }, [currentTrack])
+
   const removeFromQueue = useCallback((trackId: string) => {
-    setQueue(prev => prev.filter(t => t.id !== trackId))
+    setQueue(prev => {
+      const next = prev.filter(t => t.id !== trackId)
+      resyncIndex(next)
+      return next
+    })
+  }, [resyncIndex])
+
+  const removeMultipleFromQueue = useCallback((trackIds: string[]) => {
+    const idSet = new Set(trackIds)
+    setQueue(prev => {
+      const next = prev.filter(t => !idSet.has(t.id))
+      resyncIndex(next)
+      return next
+    })
+  }, [resyncIndex])
+
+  // 调整顺序：把 fromIndex 的曲目移动到 toIndex
+  const moveInQueue = useCallback((fromIndex: number, toIndex: number) => {
+    setQueue(prev => {
+      if (
+        fromIndex === toIndex ||
+        fromIndex < 0 || fromIndex >= prev.length ||
+        toIndex < 0 || toIndex >= prev.length
+      ) return prev
+      const next = [...prev]
+      const [moved] = next.splice(fromIndex, 1)
+      next.splice(toIndex, 0, moved)
+      resyncIndex(next)
+      return next
+    })
+  }, [resyncIndex])
+
+  // 立即播放：把曲目置于队列首位并播放（点击歌曲的默认行为）
+  const playNow = useCallback((track: Track) => {
+    setQueue(prev => [track, ...prev.filter(t => t.id !== track.id)])
+    setCurrentTrack(track)
+    setProgress(0)
+    currentIndexRef.current = 0
+    setIsPlaying(true)
   }, [])
+
+  // 下一首播放：把曲目插入到当前曲目之后（不在队列则新增；无播放则等同立即播放）
+  const playNext = useCallback((track: Track) => {
+    if (!currentTrack) { playNow(track); return }
+    setQueue(prev => {
+      const without = prev.filter(t => t.id !== track.id)
+      const curIdx = without.findIndex(t => t.id === currentTrack.id)
+      const insertAt = curIdx >= 0 ? curIdx + 1 : without.length
+      const next = [...without.slice(0, insertAt), track, ...without.slice(insertAt)]
+      resyncIndex(next)
+      return next
+    })
+    showToast('已设为下一首播放')
+  }, [currentTrack, resyncIndex, showToast, playNow])
 
   const clearQueue = useCallback(() => {
     setQueue([])
@@ -345,6 +420,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         addToQueue,
         addTracksToQueue,
         removeFromQueue,
+        removeMultipleFromQueue,
+        moveInQueue,
+        playNow,
+        playNext,
         clearQueue,
         toggleLike,
         playAll,
@@ -352,6 +431,31 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       }}
     >
       {children}
+      {toast && (
+        <div
+          style={{
+            position: 'fixed',
+            left: '50%',
+            bottom: 96,
+            transform: 'translateX(-50%)',
+            zIndex: 80,
+            padding: '8px 18px',
+            borderRadius: 'var(--radius-full)',
+            background: 'var(--glass-bg-heavy)',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
+            border: '1px solid var(--glass-border)',
+            boxShadow: 'var(--shadow-lg)',
+            color: 'var(--color-foreground)',
+            fontSize: 13,
+            fontFamily: 'var(--font-body)',
+            pointerEvents: 'none',
+            whiteSpace: 'nowrap',
+          } as React.CSSProperties}
+        >
+          {toast}
+        </div>
+      )}
     </PlayerContext.Provider>
   )
 }

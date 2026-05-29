@@ -224,6 +224,89 @@ export async function searchVideo(
   return data.data as SearchResponse
 }
 
+// ===== 搜索 UP主 =====
+
+export interface UserSearchResult {
+  type: string
+  mid: number
+  uname: string
+  usign: string
+  fans: number
+  videos: number
+  upic: string
+  level: number
+  is_live: number
+  official_verify?: { type: number; desc: string }
+}
+
+export interface UserSearchResponse {
+  numResults: number
+  numPages: number
+  result: UserSearchResult[]
+}
+
+// 搜索 UP主：同一 WBI 搜索接口，search_type=bili_user
+export async function searchUser(
+  keyword: string,
+  page = 1,
+  pageSize = 20,
+): Promise<UserSearchResponse> {
+  const query = await encodeWbi({
+    search_type: 'bili_user',
+    keyword,
+    page,
+    page_size: pageSize,
+  })
+  const resp = await fetch(`${BILI_API}/x/web-interface/wbi/search/type?${query}`, {
+    credentials: 'include',
+    headers: { Referer: 'https://www.bilibili.com' },
+  })
+  const data = await resp.json()
+  if (data.code !== 0) {
+    throw new BiliApiError(data.code, data.message, '/x/web-interface/wbi/search/type')
+  }
+  return data.data as UserSearchResponse
+}
+
+// ===== UP主 投稿视频 =====
+
+export interface SpaceVideo {
+  bvid: string
+  aid: number
+  title: string
+  pic: string
+  length: string
+  play: number
+  created: number
+  description: string
+  author: string
+}
+
+export interface SpaceArcSearchData {
+  list: { vlist: SpaceVideo[] }
+  page: { pn: number; ps: number; count: number }
+}
+
+// UP主 投稿列表：/x/space/wbi/arc/search 同样需 WBI 签名
+// 渲染进程（完整 Chromium 指纹 + Cookie）可绕过该接口的 -352 风控
+export async function getUserVideos(
+  mid: number,
+  page = 1,
+  pageSize = 30,
+  order: 'pubdate' | 'click' = 'pubdate',
+): Promise<SpaceArcSearchData> {
+  const query = await encodeWbi({ mid, pn: page, ps: pageSize, order, platform: 'web' })
+  const resp = await fetch(`${BILI_API}/x/space/wbi/arc/search?${query}`, {
+    credentials: 'include',
+    headers: { Referer: `https://space.bilibili.com/${mid}/video` },
+  })
+  const data = await resp.json()
+  if (data.code !== 0) {
+    throw new BiliApiError(data.code, data.message, '/x/space/wbi/arc/search')
+  }
+  return data.data as SpaceArcSearchData
+}
+
 // ===== 视频详情 =====
 
 export interface VideoOwner {
@@ -380,7 +463,18 @@ export async function getMusicRanking(): Promise<MusicRankingItem[]> {
 
 // ===== 音乐中心 (music.bilibili.com/pc/music-center 同源数据) =====
 
-// 音乐中心曲目（综合榜 / 新歌），均含可播放的 bvid
+// 综合榜每项的关联可播放稿件（顶层 bvid 是 music-metadata 伪 id，不可 view）
+export interface MusicCenterRelatedArchive {
+  aid: string
+  bvid: string
+  cid: string
+  cover: string
+  title: string
+  duration?: number
+}
+
+// 音乐中心曲目（综合榜 / 新歌）
+// 新歌：顶层 bvid 即可播放稿件；综合榜：需取 related_archive.bvid
 export interface MusicCenterItem {
   music_id: string
   music_title: string
@@ -393,6 +487,7 @@ export interface MusicCenterItem {
   score?: number
   total_vv?: number
   publish_time?: string
+  related_archive?: MusicCenterRelatedArchive
 }
 
 // 综合热歌榜（无需 WBI / csrf）
@@ -457,23 +552,67 @@ export async function extractAudioFromSearch(
 
 /**
  * 从指定 BV 号提取音频源
+ *
+ * fallback：音乐中心曲目的顶层 avid+cid。部分曲目的 bvid 稿件已不存在
+ * （/x/web-interface/view 返回 -404），但其音乐原生流可经 avid+cid 直取。
  */
-export async function extractAudioFromVideo(bvid: string): Promise<TrackSource> {
-  const detail = await getVideoDetail(bvid)
-  const playData = await getPlayUrl(bvid, detail.cid)
-  const audioUrl = getBestAudioUrl(playData)
+export async function extractAudioFromVideo(
+  bvid: string,
+  fallback?: { aid?: string | number; cid?: string | number },
+): Promise<TrackSource> {
+  try {
+    const detail = await getVideoDetail(bvid)
+    const playData = await getPlayUrl(bvid, detail.cid)
+    const audioUrl = getBestAudioUrl(playData)
 
-  const bestAudio = [...playData.dash.audio].sort((a, b) => b.bandwidth - a.bandwidth)[0]
+    const bestAudio = [...playData.dash.audio].sort((a, b) => b.bandwidth - a.bandwidth)[0]
+
+    return {
+      bvid: detail.bvid,
+      aid: detail.aid,
+      cid: detail.cid,
+      title: detail.title,
+      artist: detail.owner.name,
+      coverUrl: toHttpsUrl(detail.pic),
+      duration: detail.duration,
+      audioUrl,
+      audioQuality: bestAudio.quality,
+      audioMimeType: bestAudio.mimeType,
+    }
+  } catch (e) {
+    if (fallback?.aid && fallback?.cid) {
+      return extractAudioByAvidCid(fallback.aid, fallback.cid, bvid)
+    }
+    throw e
+  }
+}
+
+/**
+ * 用 avid + cid 直取音频流（bvid 稿件 -404 时的回退）
+ *
+ * 不经 view 接口，故 title/artist/cover 留空，由调用方保留已有展示信息。
+ */
+async function extractAudioByAvidCid(
+  aid: string | number,
+  cid: string | number,
+  bvid = '',
+): Promise<TrackSource> {
+  const playData = await biliFetch<PlayUrlData>('/x/player/playurl', {
+    params: { avid: aid, cid, qn: 0, fnver: 0, fnval: 16, fourk: 1 },
+  })
+  const audioStreams = playData.dash?.audio
+  if (!audioStreams?.length) throw new Error('No audio stream available')
+  const bestAudio = [...audioStreams].sort((a, b) => b.bandwidth - a.bandwidth)[0]
 
   return {
-    bvid: detail.bvid,
-    aid: detail.aid,
-    cid: detail.cid,
-    title: detail.title,
-    artist: detail.owner.name,
-    coverUrl: toHttpsUrl(detail.pic),
-    duration: detail.duration,
-    audioUrl,
+    bvid,
+    aid: Number(aid) || 0,
+    cid: Number(cid) || 0,
+    title: '',
+    artist: '',
+    coverUrl: '',
+    duration: 0,
+    audioUrl: bestAudio.baseUrl,
     audioQuality: bestAudio.quality,
     audioMimeType: bestAudio.mimeType,
   }

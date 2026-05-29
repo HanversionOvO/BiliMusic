@@ -1,21 +1,31 @@
-import { Search, X, Loader2, Plus, Heart, Music } from 'lucide-react'
+import { Search, X, Loader2, Music, Video, Users, ArrowLeft } from 'lucide-react'
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { usePlayer } from '@/contexts/PlayerContext'
-import { searchVideo, extractAudio, type SearchItem } from '@/services/api'
+import TrackActions from '@/components/TrackActions'
+import {
+  searchVideo,
+  searchUsers,
+  getUserVideos,
+  type SearchItem,
+  type UserResult,
+  type UpVideo,
+} from '@/services/api'
 import type { Track } from '@/types'
 
-function searchItemToTrack(item: SearchItem): Track {
-  return {
-    id: item.bvid || String(item.aid),
-    title: item.title?.replace(/<[^>]+>/g, ''),
-    artist: item.author,
-    coverUrl: item.pic?.startsWith('http') ? item.pic : `https://i0.hdslb.com${item.pic || ''}`,
-    duration: parseDuration(item.duration),
-    videoUrl: `https://www.bilibili.com/video/${item.bvid}`,
-    bvid: item.bvid,
-    playCount: item.play,
-    isLiked: false,
-  }
+type SearchType = 'video' | 'user'
+type SelectedUser = { mid: number; name: string; avatar: string }
+
+function formatCount(n: number): string {
+  if (n >= 100000000) return `${(n / 100000000).toFixed(1)}亿`
+  if (n >= 10000) return `${(n / 10000).toFixed(1)}万`
+  return String(n)
+}
+
+function formatDuration(seconds: number): string {
+  if (!seconds) return ''
+  const m = Math.floor(seconds / 60)
+  const s = Math.floor(seconds % 60)
+  return `${m}:${s.toString().padStart(2, '0')}`
 }
 
 function parseDuration(d: string): number {
@@ -26,14 +36,31 @@ function parseDuration(d: string): number {
   return 0
 }
 
+function searchItemToTrack(item: SearchItem): Track {
+  return {
+    id: item.bvid,
+    title: item.title,
+    artist: item.author,
+    coverUrl: item.pic,
+    duration: parseDuration(item.duration),
+    videoUrl: `https://www.bilibili.com/video/${item.bvid}`,
+    bvid: item.bvid,
+    playCount: item.play,
+    isLiked: false,
+  }
+}
+
 export default function SearchPage() {
   const [query, setQuery] = useState('')
+  const [searchType, setSearchType] = useState<SearchType>('video')
+  const [resultType, setResultType] = useState<SearchType>('video')
   const [isFocused, setIsFocused] = useState(false)
   const [hasSearched, setHasSearched] = useState(false)
   const [results, setResults] = useState<SearchItem[]>([])
+  const [userResults, setUserResults] = useState<UserResult[]>([])
+  const [selectedUser, setSelectedUser] = useState<SelectedUser | null>(null)
   const [loading, setLoading] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
-  const [extractingId, setExtractingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [totalResults, setTotalResults] = useState(0)
   const pageRef = useRef(1)
@@ -41,47 +68,75 @@ export default function SearchPage() {
   const currentQueryRef = useRef('')
   const sentinelRef = useRef<HTMLDivElement>(null)
 
-  const player = usePlayer()
-
-  const handleSearch = useCallback(async () => {
+  const handleSearch = useCallback(async (typeArg?: SearchType) => {
     if (!query.trim()) return
+    const type = typeArg ?? searchType
     setLoading(true)
     setError(null)
+    setSelectedUser(null)
     setResults([])
+    setUserResults([])
     pageRef.current = 1
     currentQueryRef.current = query.trim()
     try {
-      const data = await searchVideo(query.trim(), 1)
-      setResults(data.items)
-      setTotalResults(data.totalResults)
-      totalPagesRef.current = data.totalPages
+      if (type === 'video') {
+        const data = await searchVideo(query.trim(), 1)
+        setResults(data.items)
+        setTotalResults(data.totalResults)
+        totalPagesRef.current = data.totalPages
+      } else {
+        const data = await searchUsers(query.trim(), 1)
+        setUserResults(data.items)
+        setTotalResults(data.totalResults)
+        totalPagesRef.current = data.totalPages
+      }
+      setResultType(type)
       setHasSearched(true)
     } catch (e: any) {
       setError(e.message || '搜索失败')
     } finally {
       setLoading(false)
     }
-  }, [query])
+  }, [query, searchType])
+
+  const switchType = useCallback((type: SearchType) => {
+    if (type === searchType) return
+    setSearchType(type)
+    setSelectedUser(null)
+    setResults([])
+    setUserResults([])
+    if (query.trim()) {
+      handleSearch(type)
+    } else {
+      setHasSearched(false)
+    }
+  }, [searchType, query, handleSearch])
 
   const loadMore = useCallback(async () => {
     if (loadingMore || pageRef.current >= totalPagesRef.current) return
     setLoadingMore(true)
     try {
       const nextPage = pageRef.current + 1
-      const data = await searchVideo(currentQueryRef.current, nextPage)
-      pageRef.current = nextPage
-      setResults(prev => [...prev, ...data.items])
+      if (resultType === 'video') {
+        const data = await searchVideo(currentQueryRef.current, nextPage)
+        pageRef.current = nextPage
+        setResults(prev => [...prev, ...data.items])
+      } else {
+        const data = await searchUsers(currentQueryRef.current, nextPage)
+        pageRef.current = nextPage
+        setUserResults(prev => [...prev, ...data.items])
+      }
     } catch {
       // 加载更多失败静默处理
     } finally {
       setLoadingMore(false)
     }
-  }, [loadingMore])
+  }, [loadingMore, resultType])
 
-  // IntersectionObserver 触底加载
+  // IntersectionObserver 触底加载（UP主空间视图有独立分页，故此处排除）
   useEffect(() => {
     const sentinel = sentinelRef.current
-    if (!sentinel || !hasSearched) return
+    if (!sentinel || !hasSearched || selectedUser) return
 
     const observer = new IntersectionObserver(
       (entries) => {
@@ -93,58 +148,7 @@ export default function SearchPage() {
     )
     observer.observe(sentinel)
     return () => observer.disconnect()
-  }, [hasSearched, loadMore, results.length])
-
-  const handleAddToQueue = useCallback(async (bvid: string) => {
-    if (!bvid) return
-    setExtractingId(bvid)
-    try {
-      const trackSource = await extractAudio(bvid)
-      const track: Track = {
-        id: trackSource.bvid,
-        title: trackSource.title,
-        artist: trackSource.artist,
-        coverUrl: trackSource.coverUrl,
-        duration: trackSource.duration,
-        videoUrl: `https://www.bilibili.com/video/${trackSource.bvid}`,
-        bvid: trackSource.bvid,
-        playCount: 0,
-        isLiked: false,
-      }
-      player.addToQueue(track)
-      if (!player.currentTrack) {
-        player.play(track)
-      }
-    } catch (e: any) {
-      setError(e.message || '提取音频失败')
-    } finally {
-      setExtractingId(null)
-    }
-  }, [player])
-
-  const handlePlayNow = useCallback(async (item: SearchItem) => {
-    if (!item.bvid) return
-    setExtractingId(item.bvid)
-    try {
-      const trackSource = await extractAudio(item.bvid)
-      const track: Track = {
-        id: trackSource.bvid,
-        title: trackSource.title,
-        artist: trackSource.artist,
-        coverUrl: trackSource.coverUrl,
-        duration: trackSource.duration,
-        videoUrl: `https://www.bilibili.com/video/${trackSource.bvid}`,
-        bvid: trackSource.bvid,
-        playCount: 0,
-        isLiked: false,
-      }
-      player.play(track)
-    } catch (e: any) {
-      setError(e.message || '提取音频失败')
-    } finally {
-      setExtractingId(null)
-    }
-  }, [player])
+  }, [hasSearched, selectedUser, loadMore, results.length, userResults.length])
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-lg)' }}>
@@ -171,7 +175,7 @@ export default function SearchPage() {
           )}
           <input
             type="text"
-            placeholder="搜索视频、音乐、UP主..."
+            placeholder={searchType === 'video' ? '搜索视频、音乐...' : '搜索 UP主...'}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onFocus={() => setIsFocused(true)}
@@ -189,13 +193,19 @@ export default function SearchPage() {
           />
           {query && (
             <button
-              onClick={() => { setQuery(''); setHasSearched(false); setResults([]) }}
+              onClick={() => { setQuery(''); setHasSearched(false); setResults([]); setUserResults([]); setSelectedUser(null) }}
               style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-muted)', padding: 2 }}
             >
               <X size={16} />
             </button>
           )}
         </div>
+      </div>
+
+      {/* 搜索类型切换 */}
+      <div style={{ display: 'flex', gap: 8 }}>
+        <TypeTab active={searchType === 'video'} icon={<Video size={15} />} label="视频" onClick={() => switchType('video')} />
+        <TypeTab active={searchType === 'user'} icon={<Users size={15} />} label="UP主" onClick={() => switchType('user')} />
       </div>
 
       {/* Error */}
@@ -220,8 +230,10 @@ export default function SearchPage() {
         </div>
       )}
 
-      {/* Search Results */}
-      {hasSearched ? (
+      {/* UP主 空间视图 */}
+      {selectedUser ? (
+        <UserSpaceView user={selectedUser} onBack={() => setSelectedUser(null)} />
+      ) : hasSearched ? (
         <>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span className="text-body">
@@ -232,135 +244,26 @@ export default function SearchPage() {
             </span>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
-            {results.map((result) => {
-              const isExtracting = extractingId === result.bvid
-              const isCurrent = player.currentTrack?.id === result.bvid
-              return (
-                <div
+          {resultType === 'user' ? (
+            /* UP主 结果 */
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {userResults.map((user) => (
+                <UserCard key={user.mid} user={user} onEnter={() => setSelectedUser({ mid: user.mid, name: user.name, avatar: user.avatar })} />
+              ))}
+            </div>
+          ) : (
+            /* 视频结果 — 音乐风列表 */
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {results.map((result) => (
+                <VideoRow
                   key={result.bvid || result.aid}
-                  className="glass-panel"
-                  style={{
-                    display: 'flex',
-                    gap: 'var(--space-md)',
-                    padding: 'var(--space-md)',
-                    cursor: 'pointer',
-                    borderLeft: isCurrent ? '3px solid var(--color-accent)' : undefined,
-                    transition: 'transform var(--duration-normal), box-shadow var(--duration-normal)',
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.transform = 'translateY(-1px)'
-                    e.currentTarget.style.boxShadow = 'var(--shadow-md)'
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.transform = 'translateY(0)'
-                    e.currentTarget.style.boxShadow = 'var(--shadow-sm)'
-                  }}
-                  onClick={() => handlePlayNow(result)}
-                >
-                  {/* Cover */}
-                  <div
-                    style={{
-                      width: 120,
-                      height: 90,
-                      borderRadius: 'var(--radius-sm)',
-                      background: 'var(--color-border)',
-                      flexShrink: 0,
-                      position: 'relative',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      overflow: 'hidden',
-                    }}
-                  >
-                    {result.pic ? (
-                      <img src={result.pic} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} loading="lazy" />
-                    ) : (
-                      <Music size={24} style={{ color: 'var(--color-muted)' }} />
-                    )}
-                    <span
-                      style={{
-                        position: 'absolute',
-                        bottom: 4,
-                        right: 4,
-                        padding: '1px 6px',
-                        borderRadius: 'var(--radius-sm)',
-                        background: 'rgba(0,0,0,0.6)',
-                        color: '#fff',
-                        fontSize: 11,
-                      }}
-                    >
-                      {result.duration}
-                    </span>
-                    {isCurrent && (
-                      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,174,236,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <Music size={20} style={{ color: '#fff' }} />
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Info */}
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div
-                      className="text-body"
-                      style={{
-                        fontWeight: 500,
-                        color: isCurrent ? 'var(--color-accent)' : 'var(--color-foreground)',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                      }}
-                    >
-                      {result.title}
-                    </div>
-                    <div className="text-caption" style={{ color: 'var(--color-muted)', marginTop: 4 }}>
-                      UP主: {result.author} · {result.play > 10000 ? `${(result.play / 10000).toFixed(1)}万` : result.play}播放
-                    </div>
-                    <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleAddToQueue(result.bvid) }}
-                        disabled={isExtracting}
-                        style={{
-                          padding: '4px 12px',
-                          borderRadius: 'var(--radius-sm)',
-                          background: 'var(--color-primary)',
-                          color: 'var(--color-on-primary)',
-                          border: 'none',
-                          fontSize: 12,
-                          fontWeight: 600,
-                          cursor: isExtracting ? 'wait' : 'pointer',
-                          fontFamily: 'var(--font-body)',
-                          opacity: isExtracting ? 0.6 : 1,
-                          transition: 'opacity var(--duration-fast)',
-                        }}
-                      >
-                        {isExtracting ? '提取中...' : '+ 添加到播放列表'}
-                      </button>
-                      <button
-                        onClick={(e) => { e.stopPropagation() }}
-                        style={{
-                          padding: '4px 12px',
-                          borderRadius: 'var(--radius-sm)',
-                          background: 'var(--glass-bg)',
-                          border: '1px solid var(--glass-border)',
-                          color: 'var(--color-foreground)',
-                          fontSize: 12,
-                          cursor: 'pointer',
-                          fontFamily: 'var(--font-body)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 4,
-                        }}
-                      >
-                        <Heart size={12} />
-                        收藏
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
+                  track={searchItemToTrack(result)}
+                  subtitle={`${result.author} · ${formatCount(result.play)}播放`}
+                  durationText={result.duration}
+                />
+              ))}
+            </div>
+          )}
 
           {/* Sentinel for infinite scroll */}
           <div ref={sentinelRef} style={{ height: 1 }} />
@@ -369,7 +272,7 @@ export default function SearchPage() {
               <Loader2 size={20} style={{ animation: 'spin 1s linear infinite' }} />
             </div>
           )}
-          {pageRef.current >= totalPagesRef.current && results.length > 0 && (
+          {pageRef.current >= totalPagesRef.current && (results.length > 0 || userResults.length > 0) && (
             <div className="text-caption" style={{ textAlign: 'center', color: 'var(--color-muted)', padding: 'var(--space-md)' }}>
               — 已加载全部 {totalResults.toLocaleString()} 条结果 —
             </div>
@@ -387,11 +290,300 @@ export default function SearchPage() {
           }}
         >
           <Search size={48} strokeWidth={1} style={{ marginBottom: 16 }} />
-          <p className="text-h3">搜索B站视频</p>
+          <p className="text-h3">{searchType === 'video' ? '搜索 B站视频' : '搜索 UP主'}</p>
           <p className="text-caption" style={{ marginTop: 4 }}>
-            输入关键词搜索，将视频转换为音乐
+            {searchType === 'video' ? '输入关键词搜索，点击歌曲加入播放列表' : '搜索 UP主，进入主页选择其投稿'}
           </p>
         </div>
+      )}
+    </div>
+  )
+}
+
+// ===== 搜索类型切换标签 =====
+function TypeTab({ active, icon, label, onClick }: { active: boolean; icon: React.ReactNode; label: string; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 6,
+        padding: '6px 16px',
+        borderRadius: 'var(--radius-full)',
+        background: active ? 'var(--color-primary)' : 'var(--glass-bg)',
+        color: active ? 'var(--color-on-primary)' : 'var(--color-muted-foreground)',
+        border: `1px solid ${active ? 'var(--color-primary)' : 'var(--glass-border)'}`,
+        fontSize: 13,
+        fontWeight: active ? 600 : 400,
+        cursor: 'pointer',
+        fontFamily: 'var(--font-body)',
+        transition: 'all var(--duration-fast)',
+      }}
+    >
+      {icon}
+      {label}
+    </button>
+  )
+}
+
+// ===== 音乐风曲目行（搜索结果 / UP主投稿共用）=====
+function VideoRow({ track, subtitle, durationText }: {
+  track: Track
+  subtitle: string
+  durationText?: string
+}) {
+  const player = usePlayer()
+  const [hover, setHover] = useState(false)
+  const isCurrent = player.currentTrack?.id === track.id
+  return (
+    <div
+      onClick={() => player.playNow(track)}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 'var(--space-md)',
+        padding: '8px var(--space-md)',
+        cursor: 'pointer',
+        borderRadius: 'var(--radius-md)',
+        background: hover || isCurrent ? 'var(--color-primary-light)' : 'transparent',
+        transition: 'background var(--duration-fast)',
+      }}
+    >
+      <div style={{ width: 48, height: 48, borderRadius: 8, background: 'var(--color-border)', overflow: 'hidden', flexShrink: 0 }}>
+        {track.coverUrl ? (
+          <img src={track.coverUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} loading="lazy" />
+        ) : (
+          <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Music size={18} style={{ color: 'var(--color-muted)' }} />
+          </div>
+        )}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div
+          className="text-body"
+          style={{
+            fontWeight: isCurrent ? 600 : 400,
+            color: isCurrent ? 'var(--color-primary)' : 'var(--color-foreground)',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}
+        >
+          {track.title}
+        </div>
+        <div className="text-caption" style={{ color: 'var(--color-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {subtitle}
+        </div>
+      </div>
+      {durationText && (
+        <span className="text-caption" style={{ color: 'var(--color-muted)', flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
+          {durationText}
+        </span>
+      )}
+      <div style={{ opacity: hover ? 1 : 0.5, transition: 'opacity var(--duration-fast)', flexShrink: 0 }}>
+        <TrackActions track={track} />
+      </div>
+    </div>
+  )
+}
+
+// ===== UP主 结果行 =====
+function UserCard({ user, onEnter }: { user: UserResult; onEnter: () => void }) {
+  const [hover, setHover] = useState(false)
+  return (
+    <div
+      onClick={onEnter}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 'var(--space-md)',
+        padding: '10px var(--space-md)',
+        cursor: 'pointer',
+        borderRadius: 'var(--radius-md)',
+        background: hover ? 'var(--color-primary-light)' : 'transparent',
+        transition: 'background var(--duration-fast)',
+      }}
+    >
+      <div style={{ width: 52, height: 52, borderRadius: 'var(--radius-full)', background: 'var(--color-border)', overflow: 'hidden', flexShrink: 0 }}>
+        {user.avatar ? (
+          <img src={user.avatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} loading="lazy" />
+        ) : (
+          <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Users size={20} style={{ color: 'var(--color-muted)' }} />
+          </div>
+        )}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div className="text-body" style={{ fontWeight: 600, color: 'var(--color-foreground)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {user.name}
+        </div>
+        <div className="text-caption" style={{ color: 'var(--color-muted)', marginTop: 1 }}>
+          {formatCount(user.fans)}粉丝 · {user.videoCount}个视频
+        </div>
+        {user.sign && (
+          <div className="text-caption" style={{ color: 'var(--color-muted)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', opacity: 0.75 }}>
+            {user.sign}
+          </div>
+        )}
+      </div>
+      <span className="text-caption" style={{ color: 'var(--color-primary)', flexShrink: 0 }}>进入主页 →</span>
+    </div>
+  )
+}
+
+// ===== UP主 空间（投稿视频列表）=====
+function UserSpaceView({ user, onBack }: { user: SelectedUser; onBack: () => void }) {
+  const [videos, setVideos] = useState<UpVideo[]>([])
+  const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [total, setTotal] = useState(0)
+  const pageRef = useRef(1)
+  const sentinelRef = useRef<HTMLDivElement>(null)
+  const player = usePlayer()
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    pageRef.current = 1
+    try {
+      const data = await getUserVideos(user.mid, 1, 30)
+      setVideos(data.items)
+      setTotal(data.total)
+    } catch (e: any) {
+      setError(e.message || '加载失败')
+    } finally {
+      setLoading(false)
+    }
+  }, [user.mid])
+
+  useEffect(() => { load() }, [load])
+
+  const loadMore = useCallback(async () => {
+    if (loadingMore || videos.length === 0 || videos.length >= total) return
+    setLoadingMore(true)
+    try {
+      const nextPage = pageRef.current + 1
+      const data = await getUserVideos(user.mid, nextPage, 30)
+      pageRef.current = nextPage
+      setVideos(prev => [...prev, ...data.items])
+    } catch {
+      // 静默
+    } finally {
+      setLoadingMore(false)
+    }
+  }, [loadingMore, videos.length, total, user.mid])
+
+  useEffect(() => {
+    const sentinel = sentinelRef.current
+    if (!sentinel) return
+    const observer = new IntersectionObserver(
+      (entries) => { if (entries[0].isIntersecting) loadMore() },
+      { rootMargin: '200px' },
+    )
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [loadMore, videos.length])
+
+  const toTrack = useCallback((v: UpVideo): Track => ({
+    id: v.bvid,
+    title: v.title,
+    artist: user.name,
+    coverUrl: v.coverUrl,
+    duration: v.duration,
+    videoUrl: `https://www.bilibili.com/video/${v.bvid}`,
+    bvid: v.bvid,
+    playCount: v.play,
+    isLiked: false,
+  }), [user.name])
+
+  const playAll = useCallback(() => {
+    if (videos.length === 0) return
+    player.playAll(videos.map(toTrack))
+  }, [videos, player, toTrack])
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
+      {/* UP主 资料头部 */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)' }}>
+        <button
+          onClick={onBack}
+          title="返回"
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            width: 36, height: 36, borderRadius: 'var(--radius-full)',
+            background: 'var(--glass-bg)', border: '1px solid var(--glass-border)',
+            color: 'var(--color-foreground)', cursor: 'pointer', flexShrink: 0,
+          }}
+        >
+          <ArrowLeft size={18} />
+        </button>
+        <div style={{ width: 56, height: 56, borderRadius: 'var(--radius-full)', background: 'var(--color-border)', overflow: 'hidden', flexShrink: 0 }}>
+          {user.avatar ? (
+            <img src={user.avatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          ) : (
+            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Users size={22} style={{ color: 'var(--color-muted)' }} />
+            </div>
+          )}
+        </div>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div className="text-h3" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.name}</div>
+          {total > 0 && <div className="text-caption" style={{ color: 'var(--color-muted)', marginTop: 2 }}>共 {total.toLocaleString()} 个投稿</div>}
+        </div>
+        {videos.length > 0 && (
+          <button
+            onClick={playAll}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '8px 18px', borderRadius: 'var(--radius-full)',
+              background: 'var(--color-primary)', color: 'var(--color-on-primary)',
+              border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600,
+              fontFamily: 'var(--font-body)', flexShrink: 0,
+            }}
+          >
+            播放全部
+          </button>
+        )}
+      </div>
+
+      {loading ? (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: 'var(--space-3xl)', color: 'var(--color-muted)' }}>
+          <Loader2 size={24} style={{ animation: 'spin 1s linear infinite' }} />
+        </div>
+      ) : error ? (
+        <div style={{ textAlign: 'center', padding: 'var(--space-2xl)', color: 'var(--color-muted)' }}>
+          <p className="text-body">{error}</p>
+          <button onClick={load} style={{ marginTop: 12, background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', fontFamily: 'var(--font-body)' }}>重试</button>
+        </div>
+      ) : (
+        <>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {videos.map((video) => (
+              <VideoRow
+                key={video.bvid}
+                track={toTrack(video)}
+                subtitle={`${formatCount(video.play)}播放`}
+                durationText={formatDuration(video.duration)}
+              />
+            ))}
+          </div>
+
+          <div ref={sentinelRef} style={{ height: 1 }} />
+          {loadingMore && (
+            <div style={{ display: 'flex', justifyContent: 'center', padding: 'var(--space-md)', color: 'var(--color-muted)' }}>
+              <Loader2 size={20} style={{ animation: 'spin 1s linear infinite' }} />
+            </div>
+          )}
+          {videos.length >= total && videos.length > 0 && (
+            <div className="text-caption" style={{ textAlign: 'center', color: 'var(--color-muted)', padding: 'var(--space-md)' }}>
+              — 已加载全部 {total.toLocaleString()} 个投稿 —
+            </div>
+          )}
+        </>
       )}
     </div>
   )

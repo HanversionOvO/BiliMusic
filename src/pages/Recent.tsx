@@ -1,6 +1,7 @@
 import { Clock, Trash2, Music } from 'lucide-react'
 import { useState, useCallback } from 'react'
 import { usePlayer } from '@/contexts/PlayerContext'
+import TrackActions from '@/components/TrackActions'
 import { loadRecentTracks, saveRecentTracks } from '@/utils/storage'
 import type { Track } from '@/types'
 
@@ -46,7 +47,7 @@ function TrackList({ tracks, player }: { tracks: Track[]; player: any }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       {tracks.map((track, i) => (
-        <div key={track.id + String(i)} onClick={() => player.play(track)}
+        <div key={track.id + String(i)} onClick={() => player.playNow(track)}
           style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)', padding: '10px var(--space-md)', cursor: 'pointer', borderRadius: 'var(--radius-md)', transition: 'background var(--duration-fast)', background: player.currentTrack?.id === track.id ? 'var(--color-primary-light)' : undefined }}
           onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-primary-light)' }}
           onMouseLeave={e => { if (player.currentTrack?.id !== track.id) e.currentTarget.style.background = 'transparent' }}
@@ -57,6 +58,7 @@ function TrackList({ tracks, player }: { tracks: Track[]; player: any }) {
             <div className="text-caption" style={{ color: 'var(--color-muted)' }}>{track.artist}</div>
           </div>
           <span className="text-caption" style={{ color: 'var(--color-muted)' }}>{fmt(track.duration)}</span>
+          <TrackActions track={track} size={15} />
         </div>
       ))}
     </div>
