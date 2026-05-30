@@ -722,7 +722,6 @@ body {
   border: 0;
   background: transparent;
   color: var(--color-muted);
-  cursor: pointer;
   transition: background var(--duration-fast) var(--easing-default), color var(--duration-fast) var(--easing-default);
 }
 
