@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   ChevronDown, Play, Pause, SkipBack, SkipForward, Shuffle, Repeat,
-  Heart, Volume2, VolumeX, Search, Music, Loader2, X,
+  Heart, Volume2, VolumeX, Search, Music, Loader2, Maximize2, Minimize2, X,
 } from 'lucide-react'
 import { usePlayer } from '@/contexts/PlayerContext'
 import { useNowPlaying } from '@/contexts/NowPlayingContext'
@@ -28,6 +28,7 @@ export default function NowPlaying() {
   const track = player.currentTrack
   const lyrics = useLyrics(track, expanded && settings.showLyrics)
   const duration = player.duration || track?.duration || 0
+  const [fullscreen, setFullscreen] = useState(false)
 
   useEffect(() => {
     if (!expanded) return
@@ -35,6 +36,29 @@ export default function NowPlaying() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [expanded, close])
+
+  useEffect(() => {
+    const api = window.electronAPI
+    if (!api) return
+    api.isFullscreen?.().then(setFullscreen).catch(() => {})
+    return api.onFullscreenChange?.(setFullscreen)
+  }, [])
+
+  const toggleFullscreen = () => {
+    window.electronAPI?.toggleFullscreen?.()
+    window.electronAPI?.isFullscreen?.()
+      .then(setFullscreen)
+      .catch(() => {})
+    window.setTimeout(() => {
+      window.electronAPI?.isFullscreen?.()
+        .then(setFullscreen)
+        .catch(() => {})
+    }, 180)
+  }
+
+  const closeToTray = () => {
+    window.electronAPI?.close()
+  }
 
   return (
     <AnimatePresence>
@@ -79,6 +103,28 @@ export default function NowPlaying() {
             >
               <ChevronDown size={21} />
             </motion.button>
+            <div className="now-playing-top__actions" style={noDrag}>
+              <motion.button
+                type="button"
+                className="now-playing-close"
+                onClick={toggleFullscreen}
+                title={fullscreen ? '退出全屏' : '全屏'}
+                whileHover={{ y: 1, backgroundColor: 'rgba(255,255,255,0.18)' }}
+                whileTap={{ scale: 0.92 }}
+              >
+                {fullscreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
+              </motion.button>
+              <motion.button
+                type="button"
+                className="now-playing-close"
+                onClick={closeToTray}
+                title="关闭到托盘"
+                whileHover={{ y: 1, backgroundColor: 'rgba(255,255,255,0.18)' }}
+                whileTap={{ scale: 0.92 }}
+              >
+                <X size={19} />
+              </motion.button>
+            </div>
           </header>
 
           <main className="now-playing-main">

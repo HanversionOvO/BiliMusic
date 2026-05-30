@@ -1600,7 +1600,14 @@ body {
   height: 58px;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   padding: 0 22px;
+}
+
+.now-playing-top__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .now-playing-close {
@@ -2602,7 +2609,7 @@ body {
   overflow: hidden;
   min-height: 104px;
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: 13px;
   padding: 18px;
   border-radius: 20px;

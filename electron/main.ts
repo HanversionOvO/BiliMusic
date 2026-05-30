@@ -447,10 +447,19 @@ function createWindow() {
   const sendMaximizeState = () => {
     mainWindow?.webContents.send('window:maximized-change', Boolean(mainWindow?.isMaximized() || mainWindow?.isFullScreen()))
   }
+  const sendFullscreenState = () => {
+    mainWindow?.webContents.send('window:fullscreen-change', Boolean(mainWindow?.isFullScreen()))
+  }
   mainWindow.on('maximize', sendMaximizeState)
   mainWindow.on('unmaximize', sendMaximizeState)
-  mainWindow.on('enter-full-screen', sendMaximizeState)
-  mainWindow.on('leave-full-screen', sendMaximizeState)
+  mainWindow.on('enter-full-screen', () => {
+    sendMaximizeState()
+    sendFullscreenState()
+  })
+  mainWindow.on('leave-full-screen', () => {
+    sendMaximizeState()
+    sendFullscreenState()
+  })
 }
 
 // 窗口控制 IPC
@@ -464,6 +473,14 @@ ipcMain.on('window:maximize', () => {
 })
 ipcMain.on('window:close', hideToTray)
 ipcMain.handle('window:isMaximized', () => Boolean(mainWindow?.isMaximized() || mainWindow?.isFullScreen()))
+ipcMain.on('window:toggle-fullscreen', () => {
+  if (!mainWindow) return
+  const next = !mainWindow.isFullScreen()
+  mainWindow.setFullScreen(next)
+  mainWindow.webContents.send('window:fullscreen-change', next)
+  mainWindow.webContents.send('window:maximized-change', Boolean(mainWindow.isMaximized() || next))
+})
+ipcMain.handle('window:isFullscreen', () => Boolean(mainWindow?.isFullScreen()))
 ipcMain.on('tray:player-state', (_event, state: TrayPlayerState) => {
   trayPlayerState = {
     hasTrack: Boolean(state?.hasTrack),

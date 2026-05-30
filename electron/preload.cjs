@@ -62,10 +62,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
   maximize: () => ipcRenderer.send('window:maximize'),
   close: () => ipcRenderer.send('window:close'),
   isMaximized: () => ipcRenderer.invoke('window:isMaximized'),
+  toggleFullscreen: () => ipcRenderer.send('window:toggle-fullscreen'),
+  isFullscreen: () => ipcRenderer.invoke('window:isFullscreen'),
   onMaximizedChange: (callback) => {
     const listener = (_event, value) => callback(Boolean(value))
     ipcRenderer.on('window:maximized-change', listener)
     return () => ipcRenderer.removeListener('window:maximized-change', listener)
+  },
+  onFullscreenChange: (callback) => {
+    const listener = (_event, value) => callback(Boolean(value))
+    ipcRenderer.on('window:fullscreen-change', listener)
+    return () => ipcRenderer.removeListener('window:fullscreen-change', listener)
   },
   updateTrayPlayerState: (state) => ipcRenderer.send('tray:player-state', state),
   onTrayPlayerCommand: (callback) => {
