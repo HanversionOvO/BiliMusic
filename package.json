@@ -8,7 +8,7 @@
     "dev": "vite",
     "build": "vite build && npm run copy-preload",
     "preview": "vite preview",
-    "copy-preload": "node -e \"require('fs').cpSync('electron/preload.cjs','dist-electron/preload.cjs')\"",
+    "copy-preload": "node -e \"const fs=require('fs');fs.cpSync('electron/preload.cjs','dist-electron/preload.cjs');fs.cpSync('electron/icon.png','dist-electron/icon.png')\"",
     "electron:dev": "vite",
     "electron:start": "npm run build && electron .",
     "electron:build": "npm run build && electron-builder"

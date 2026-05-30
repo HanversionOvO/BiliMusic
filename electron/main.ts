@@ -95,19 +95,17 @@ let trayPlayerState: TrayPlayerState = {
   queueLength: 0,
 }
 
+// 应用图标：dev 时从 electron 源目录加载，打包后从 dist-electron 同级加载（由 copy 脚本随构建复制）
+function loadAppIcon() {
+  const iconPath = process.env.VITE_DEV_SERVER_URL
+    ? path.join(__dirname, '../electron/icon.png')
+    : path.join(__dirname, 'icon.png')
+  return nativeImage.createFromPath(iconPath)
+}
+
 function createTrayIcon() {
-  const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
-      <defs>
-        <linearGradient id="g" x1="12" y1="8" x2="52" y2="58" gradientUnits="userSpaceOnUse">
-          <stop stop-color="#ff6b9c"/>
-          <stop offset="1" stop-color="#ff375f"/>
-        </linearGradient>
-      </defs>
-      <rect width="64" height="64" rx="18" fill="url(#g)"/>
-      <path d="M42 15v27.4c0 5.1-4.3 8.9-9.6 8.9-4.2 0-7.4-2.4-7.4-5.7 0-3.7 3.9-6.2 8.5-6.2 1.4 0 2.7.2 3.9.7V23.8l-17.2 3.6v19.1c0 5.1-4.3 8.9-9.6 8.9-4.2 0-7.4-2.4-7.4-5.7 0-3.7 3.9-6.2 8.5-6.2 1.4 0 2.7.2 3.9.7V22.3c0-1.2.8-2.2 2-2.4l21.6-4.5c1.5-.3 2.8.8 2.8 2.3Z" transform="translate(9 -3)" fill="white" opacity=".96"/>
-    </svg>`
-  return nativeImage.createFromDataURL(`data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`)
+  // 托盘图标尺寸较小，缩放到 32px 以兼顾标准与高 DPI 显示
+  return loadAppIcon().resize({ width: 32, height: 32 })
 }
 
 function showMainWindow() {
@@ -418,6 +416,7 @@ function createWindow() {
     frame: false,
     titleBarStyle: 'hidden',
     backgroundColor: '#F6F7F9',
+    icon: loadAppIcon(),
     webPreferences: {
       preload: process.env.VITE_DEV_SERVER_URL
         ? path.join(__dirname, '../electron/preload.cjs')
