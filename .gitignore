@@ -8,7 +8,6 @@ release
 node_modules
 
 dev.log
-package-lock.json
 
 # 鸿蒙平台
 platform/HarmonyOS/node_modules
