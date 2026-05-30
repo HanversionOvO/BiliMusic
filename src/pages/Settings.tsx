@@ -185,7 +185,7 @@ export default function Settings() {
 
           <SettingsGroup title="关于" icon={<Info size={20} />}>
             <SettingsRow label="版本">
-              <span className="settings-version">biliMusic v1.0.0</span>
+              <span className="settings-version">BiliMusic v1.0.0</span>
             </SettingsRow>
             <div className="settings-actions">
               <button type="button" onClick={() => setAboutMessage('当前已是最新版本')}>

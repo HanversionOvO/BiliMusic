@@ -2,6 +2,8 @@
   "name": "bilimusic",
   "private": true,
   "version": "1.0.0",
+  "description": "BiliMusic - 基于 Bilibili 的桌面音乐播放器",
+  "author": "Hanversion",
   "type": "module",
   "main": "dist-electron/main.js",
   "scripts": {
@@ -35,5 +37,34 @@
     "vite-plugin-electron": "^0.29.1",
     "vite-plugin-electron-renderer": "^0.14.7",
     "wait-on": "^8.0.0"
+  },
+  "build": {
+    "appId": "com.hanversion.bilimusic",
+    "productName": "BiliMusic",
+    "copyright": "Copyright © 2026 Hanversion",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "electron/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "BiliMusic",
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false,
+      "uninstallDisplayName": "BiliMusic ${version}",
+      "artifactName": "${productName}-Setup-${version}.${ext}"
+    }
   }
 }

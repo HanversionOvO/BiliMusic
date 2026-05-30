@@ -1,11 +1,18 @@
-import { app, BrowserWindow, Tray, ipcMain, nativeImage, screen, session, shell } from 'electron'
+import { app, BrowserWindow, Tray, ipcMain, nativeImage, net, protocol, screen, session, shell } from 'electron'
 import path from 'path'
-import { fileURLToPath } from 'url'
+import { fileURLToPath, pathToFileURL } from 'url'
 import { registerBiliApiHandlers } from './biliApi'
 import { registerLyricsApiHandlers } from './lyricsApi'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
+
+// 生产环境用自定义 app:// 协议加载渲染层：file:// 下 ESM(type=module) 脚本会被
+// Chromium 的 CORS 策略拦截（file:// 为不透明源）导致页面空白。自定义标准安全协议
+// 提供合法 origin，模块脚本与相对资源即可正常加载。须在 app ready 之前注册。
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true } },
+])
 
 // Chrome MCP 远程调试（开发时使用）
 app.commandLine.appendSwitch('remote-debugging-port', '17689')
@@ -38,7 +45,7 @@ function setupBiliHeaders() {
     const headers = details.requestHeaders
     const origin = headers['Origin'] || headers['origin']
     // 仅记录 API/passport 请求的真实 origin（这些请求才有对应的 onHeadersReceived 消费并清理）
-    if (origin && /^https?:\/\//.test(origin) && /\/\/(api|passport)\.bilibili\.com/.test(details.url)) {
+    if (origin && /^(https?|app):\/\//.test(origin) && /\/\/(api|passport)\.bilibili\.com/.test(details.url)) {
       reqOrigin.set(details.id, origin)
     }
     headers['Referer'] = 'https://www.bilibili.com'
@@ -119,7 +126,7 @@ function showMainWindow() {
 function updateTrayState() {
   tray?.setToolTip(trayPlayerState.hasTrack
     ? `${trayPlayerState.isPlaying ? '正在播放' : '已暂停'}: ${trayPlayerState.title}`
-    : 'biliMusic')
+    : 'BiliMusic')
   trayWindow?.webContents.send('tray:state', trayPlayerState)
 }
 
@@ -258,7 +265,7 @@ function getTrayHtml() {
       <button id="next" title="下一首">⏭</button>
     </div>
     <div class="actions">
-      <button class="row" id="show"><span>显示 biliMusic</span><span class="count" id="queue">0 首</span></button>
+      <button class="row" id="show"><span>显示 BiliMusic</span><span class="count" id="queue">0 首</span></button>
       <button class="row danger" id="quit"><span>退出应用</span><span>⌘Q</span></button>
     </div>
   </div>
@@ -379,7 +386,7 @@ function toggleTrayWindow() {
 function createTray() {
   if (tray) return
   tray = new Tray(createTrayIcon())
-  tray.setToolTip('biliMusic')
+  tray.setToolTip('BiliMusic')
   tray.on('click', showMainWindow)
   tray.on('double-click', showMainWindow)
   tray.on('right-click', toggleTrayWindow)
@@ -430,7 +437,7 @@ function createWindow() {
     mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL)
     mainWindow.webContents.openDevTools()
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'))
+    mainWindow.loadURL('app://local/index.html')
   }
 
   mainWindow.on('close', (event) => {
@@ -499,6 +506,14 @@ ipcMain.handle('shell:open-external', (_event, url: string) => {
 })
 
 app.whenReady().then(() => {
+  // 生产环境注册 app:// 协议，映射到打包后的 dist 目录（asar 内 file:// 读取透明支持）
+  if (!process.env.VITE_DEV_SERVER_URL) {
+    protocol.handle('app', (request) => {
+      const { pathname } = new URL(request.url)
+      const filePath = path.join(__dirname, '../dist', decodeURIComponent(pathname))
+      return net.fetch(pathToFileURL(filePath).toString())
+    })
+  }
   setupBiliHeaders()
   registerBiliApiHandlers()
   registerLyricsApiHandlers()

@@ -17,7 +17,7 @@ export default function TitleBar() {
     <div className="app-titlebar">
       <div className="app-titlebar__brand">
         <img src={appIcon} alt="" className="app-titlebar__logo" draggable={false} />
-        biliMusic
+        BiliMusic
       </div>
 
       <div className="app-titlebar__controls">

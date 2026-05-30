@@ -4,6 +4,7 @@
 design-system
 dist
 dist-electron
+release
 node_modules
 
 dev.log
