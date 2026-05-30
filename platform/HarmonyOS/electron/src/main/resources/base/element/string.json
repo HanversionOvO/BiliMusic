@@ -1,0 +1,52 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "BiliMusic desktop music player"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "BiliMusic"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "BiliMusic"
+    },
+    {
+      "name": "BrowserAbility_desc",
+      "value": "description"
+    },
+    {
+      "name": "BrowserAbility_label",
+      "value": "BrowserAbility"
+    },
+    {
+      "name": "button_ok",
+      "value": "ok"
+    },
+    {
+      "name": "button_cancel",
+      "value": "cancel"
+    },
+    {
+      "name": "StatusBarEntryAbility_desc",
+      "value": "BiliMusic status bar"
+    },
+    {
+      "name": "StatusBarEntryAbility_label",
+      "value": "BiliMusic"
+    },
+    {
+      "name": "StatelessAbility_desc",
+      "value": "BiliMusic stateless window"
+    },
+    {
+      "name": "StatelessAbility_label",
+      "value": "StatelessAbility"
+    },
+    {
+      "name": "OpenNewWindow_label",
+      "value": "Open New Window"
+    }
+  ]
+}

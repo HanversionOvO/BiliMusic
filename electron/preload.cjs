@@ -64,6 +64,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   isMaximized: () => ipcRenderer.invoke('window:isMaximized'),
   toggleFullscreen: () => ipcRenderer.send('window:toggle-fullscreen'),
   isFullscreen: () => ipcRenderer.invoke('window:isFullscreen'),
+  setWindowButtonVisibility: (visible) => ipcRenderer.send('window:set-button-visibility', Boolean(visible)),
   onMaximizedChange: (callback) => {
     const listener = (_event, value) => callback(Boolean(value))
     ipcRenderer.on('window:maximized-change', listener)

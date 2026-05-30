@@ -1,0 +1,60 @@
+{
+  "app": {
+    "products": [
+      {
+        "name": "default",
+        "signingConfig": "default",
+        "compatibleSdkVersion": "5.0.5(17)",
+        "compatibleSdkVersionStage": "release",
+        "runtimeOS": "HarmonyOS",
+        "buildOption": {
+          "nativeLib": {
+            "collectAllLibs": true
+          }
+        },
+        "targetSdkVersion": "6.1.0(23)"
+      }
+    ],
+    "buildModeSet": [
+      {
+        "name": "debug"
+      },
+      {
+        "name": "release"
+      }
+    ],
+    "signingConfigs": [
+      {
+        "name": "default",
+        "type": "HarmonyOS",
+        "material": {
+          "certpath": "C:\\Users\\hanve\\.ohos\\config\\default_HarmonyOS_C3DGft5kZ3oY6u1s5MV35UNzcvcYmYFCkhgAuGtU-Jo=.cer",
+          "keyAlias": "debugKey",
+          "keyPassword": "0000001BBD3F4975052CDA229753C6210ABF391F7BC91151D522A7E5A78E0679358105E36E89202E848262",
+          "profile": "C:\\Users\\hanve\\.ohos\\config\\default_HarmonyOS_C3DGft5kZ3oY6u1s5MV35UNzcvcYmYFCkhgAuGtU-Jo=.p7b",
+          "signAlg": "SHA256withECDSA",
+          "storeFile": "C:\\Users\\hanve\\.ohos\\config\\default_HarmonyOS_C3DGft5kZ3oY6u1s5MV35UNzcvcYmYFCkhgAuGtU-Jo=.p12",
+          "storePassword": "0000001B3394F46FEB15434F0D8D92D9E0EA7E0A069EF320BF8AE1E6A98034BB23EBDA6E34BB2A5AE291C8"
+        }
+      }
+    ]
+  },
+  "modules": [
+    {
+      "name": "electron",
+      "srcPath": "./electron",
+      "targets": [
+        {
+          "name": "default",
+          "applyToProducts": [
+            "default"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "web_engine",
+      "srcPath": "./web_engine"
+    }
+  ]
+}

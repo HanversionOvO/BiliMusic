@@ -86,6 +86,7 @@ declare global {
       isMaximized?: () => Promise<boolean>
       toggleFullscreen?: () => void
       isFullscreen?: () => Promise<boolean>
+      setWindowButtonVisibility?: (visible: boolean) => void
       onMaximizedChange?: (callback: (isMaximized: boolean) => void) => () => void
       onFullscreenChange?: (callback: (isFullscreen: boolean) => void) => () => void
       updateTrayPlayerState?: (state: TrayPlayerState) => void

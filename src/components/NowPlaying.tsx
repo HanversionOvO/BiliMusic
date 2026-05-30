@@ -45,6 +45,13 @@ export default function NowPlaying() {
     return api.onFullscreenChange?.(setFullscreen)
   }, [])
 
+  useEffect(() => {
+    const api = window.electronAPI
+    if (api?.platform !== 'openharmony') return
+    api.setWindowButtonVisibility?.(!expanded)
+    return () => api.setWindowButtonVisibility?.(true)
+  }, [expanded])
+
   const toggleFullscreen = () => {
     window.electronAPI?.toggleFullscreen?.()
     window.electronAPI?.isFullscreen?.()

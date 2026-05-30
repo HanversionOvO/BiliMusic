@@ -430,6 +430,9 @@ function createWindow() {
     minWidth: 1024,
     minHeight: 640,
     frame: false,
+    minimizable: true,
+    maximizable: true,
+    closable: true,
     ...(!isHarmonyOS ? { titleBarStyle: 'hidden' as const } : {}),
     backgroundColor: '#F6F7F9',
     icon: loadAppIcon(),
@@ -494,6 +497,15 @@ ipcMain.on('window:toggle-fullscreen', () => {
   mainWindow.setFullScreen(next)
   mainWindow.webContents.send('window:fullscreen-change', next)
   mainWindow.webContents.send('window:maximized-change', Boolean(mainWindow.isMaximized() || next))
+})
+ipcMain.on('window:set-button-visibility', (_event, visible: boolean) => {
+  if (!isHarmonyOS) return
+  const setWindowButtonVisibility = (mainWindow as unknown as {
+    setWindowButtonVisibility?: (visible: boolean) => void
+  } | null)?.setWindowButtonVisibility
+  if (typeof setWindowButtonVisibility === 'function') {
+    setWindowButtonVisibility.call(mainWindow, Boolean(visible))
+  }
 })
 ipcMain.handle('window:isFullscreen', () => Boolean(mainWindow?.isFullScreen()))
 ipcMain.on('tray:player-state', (_event, state: TrayPlayerState) => {

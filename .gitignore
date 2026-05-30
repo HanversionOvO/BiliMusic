@@ -6,7 +6,33 @@ dist
 dist-electron
 release
 node_modules
-platform
 
 dev.log
 package-lock.json
+
+# 鸿蒙平台
+platform/HarmonyOS/node_modules
+platform/HarmonyOS/oh_modules
+/platform/HarmonyOS/local.properties
+/platform/HarmonyOS/.idea
+/platform/HarmonyOS/**/build
+/platform/HarmonyOS/.hvigor
+/platform/HarmonyOS/.cxx
+/platform/HarmonyOS/.clangd
+/platform/HarmonyOS/.clang-format
+/platform/HarmonyOS/.clang-tidy
+/platform/HarmonyOS/**/.test
+/platform/HarmonyOS/hvigorw
+/platform/HarmonyOS/oh-package-lock.json5
+/platform/HarmonyOS/entry/oh-package-lock.json5
+/platform/HarmonyOS/entry/libs
+/platform/HarmonyOS/entry/oh_modules
+/platform/HarmonyOS/electron/oh-package-lock.json5
+/platform/HarmonyOS/electron/libs
+/platform/HarmonyOS/electron/oh_modules
+/platform/HarmonyOS/web_engine/BuildProfile.ets
+/platform/HarmonyOS/web_engine/oh-package-lock.json5
+/platform/HarmonyOS/web_engine/oh_modules
+/platform/HarmonyOS/web_engine/src/main/resources/rawfile
+/platform/HarmonyOS/web_engine/src/main/resources/resfile
+/platform/HarmonyOS/dependencies
