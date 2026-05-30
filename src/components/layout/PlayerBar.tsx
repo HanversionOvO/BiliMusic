@@ -16,7 +16,7 @@ import {
   Music,
   Maximize2,
 } from 'lucide-react'
-import { usePlayer } from '@/contexts/PlayerContext'
+import { usePlayer, usePlayerProgress } from '@/contexts/PlayerContext'
 import { useNowPlaying } from '@/contexts/NowPlayingContext'
 import { useAddToPlaylist } from '@/contexts/AddToPlaylistContext'
 import PlayQueue from '@/components/PlayQueue'
@@ -37,11 +37,12 @@ const sliderVars = {
 
 export default function PlayerBar() {
   const player = usePlayer()
+  const { progress, duration, setProgress } = usePlayerProgress()
   const { open } = useNowPlaying()
   const { openAddToPlaylist } = useAddToPlaylist()
   const [queueOpen, setQueueOpen] = useState(false)
-  const trackDuration = player.duration || player.currentTrack?.duration || 0
-  const remaining = Math.max(trackDuration - player.progress, 0)
+  const trackDuration = duration || player.currentTrack?.duration || 0
+  const remaining = Math.max(trackDuration - progress, 0)
 
   return (
     <motion.div
@@ -309,13 +310,13 @@ export default function PlayerBar() {
         </div>
 
         <div style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 11 }}>
-          <TimeLabel align="right">{formatTime(player.progress)}</TimeLabel>
+          <TimeLabel align="right">{formatTime(progress)}</TimeLabel>
           <div style={{ ...sliderVars, flex: 1 } as CSSProperties}>
             <PlayerSlider
               ariaLabel="播放进度"
-              value={player.progress}
+              value={progress}
               max={trackDuration}
-              onChange={player.setProgress}
+              onChange={setProgress}
               disabled={trackDuration <= 0}
               formatValue={formatTime}
               variant="progress"

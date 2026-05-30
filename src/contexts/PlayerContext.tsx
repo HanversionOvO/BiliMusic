@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useRef, useEffect, type ReactNode } from 'react'
+import { createContext, useContext, useState, useCallback, useMemo, useRef, useEffect, type ReactNode } from 'react'
 import type { Track, RepeatMode } from '@/types'
 import { extractAudio } from '@/services/api'
 import { addRecentTrack, toggleFavoriteTrack, loadFavoriteTracks } from '@/utils/storage'
@@ -7,8 +7,6 @@ import { useAppSettings } from '@/hooks/useAppSettings'
 interface PlayerState {
   currentTrack: Track | null
   isPlaying: boolean
-  progress: number
-  duration: number
   volume: number
   isMuted: boolean
   repeatMode: RepeatMode
@@ -23,7 +21,6 @@ interface PlayerActions {
   togglePlay: () => void
   next: () => void
   prev: () => void
-  setProgress: (p: number) => void
   setVolume: (v: number) => void
   setIsMuted: (m: boolean) => void
   setRepeatMode: (m: RepeatMode) => void
@@ -39,6 +36,12 @@ interface PlayerActions {
   toggleLike: (trackId: string) => void
   playAll: (tracks: Track[]) => void
   playFromQueue: (index: number) => void
+}
+
+interface PlayerProgress {
+  progress: number
+  duration: number
+  setProgress: (p: number) => void
 }
 
 type PlayerContext = PlayerState & PlayerActions
@@ -57,6 +60,7 @@ interface PersistedPlayerState {
 }
 
 const PlayerContext = createContext<PlayerContext | null>(null)
+const PlayerProgressContext = createContext<PlayerProgress | null>(null)
 const PLAYER_STATE_KEY = 'bilimusic_player_state'
 
 function loadPersistedPlayerState(): PersistedPlayerState {
@@ -519,42 +523,54 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     })
   }, [next, prev, togglePlay])
 
+  // 稳定的播放器值：进度（高频）不在其中，故进度跳动不会改变此引用，
+  // usePlayer() 的消费者（列表行等）不会因每秒 4 次的进度更新而重渲染。
+  const value = useMemo<PlayerContext>(() => ({
+    currentTrack,
+    isPlaying,
+    volume,
+    isMuted,
+    repeatMode,
+    isShuffled,
+    queue,
+    loadingAudio,
+    play,
+    pause,
+    togglePlay,
+    next,
+    prev,
+    setVolume: handleSetVolume,
+    setIsMuted,
+    setRepeatMode,
+    setIsShuffled,
+    addToQueue,
+    addTracksToQueue,
+    removeFromQueue,
+    removeMultipleFromQueue,
+    moveInQueue,
+    playNow,
+    playNext,
+    clearQueue,
+    toggleLike,
+    playAll,
+    playFromQueue,
+  }), [
+    currentTrack, isPlaying, volume, isMuted, repeatMode, isShuffled, queue, loadingAudio,
+    play, pause, togglePlay, next, prev, handleSetVolume, setIsMuted, setRepeatMode, setIsShuffled,
+    addToQueue, addTracksToQueue, removeFromQueue, removeMultipleFromQueue, moveInQueue,
+    playNow, playNext, clearQueue, toggleLike, playAll, playFromQueue,
+  ])
+
+  // 进度高频更新（timeupdate ~4Hz）独立成 context，仅 PlayerBar/NowPlaying 订阅
+  const progressValue = useMemo<PlayerProgress>(() => ({
+    progress,
+    duration,
+    setProgress: handleSetProgress,
+  }), [progress, duration, handleSetProgress])
+
   return (
-    <PlayerContext.Provider
-      value={{
-        currentTrack,
-        isPlaying,
-        progress,
-        duration,
-        volume,
-        isMuted,
-        repeatMode,
-        isShuffled,
-        queue,
-        loadingAudio,
-        play,
-        pause,
-        togglePlay,
-        next,
-        prev,
-        setProgress: handleSetProgress,
-        setVolume: handleSetVolume,
-        setIsMuted,
-        setRepeatMode,
-        setIsShuffled,
-        addToQueue,
-        addTracksToQueue,
-        removeFromQueue,
-        removeMultipleFromQueue,
-        moveInQueue,
-        playNow,
-        playNext,
-        clearQueue,
-        toggleLike,
-        playAll,
-        playFromQueue,
-      }}
-    >
+    <PlayerContext.Provider value={value}>
+      <PlayerProgressContext.Provider value={progressValue}>
       {children}
       {toast && (
         <div
@@ -581,6 +597,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
           {toast}
         </div>
       )}
+      </PlayerProgressContext.Provider>
     </PlayerContext.Provider>
   )
 }
@@ -588,5 +605,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 export function usePlayer(): PlayerContext {
   const ctx = useContext(PlayerContext)
   if (!ctx) throw new Error('usePlayer must be used within PlayerProvider')
+  return ctx
+}
+
+export function usePlayerProgress(): PlayerProgress {
+  const ctx = useContext(PlayerProgressContext)
+  if (!ctx) throw new Error('usePlayerProgress must be used within PlayerProvider')
   return ctx
 }

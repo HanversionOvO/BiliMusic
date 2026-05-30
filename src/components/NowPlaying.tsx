@@ -4,7 +4,7 @@ import {
   ChevronDown, Play, Pause, SkipBack, SkipForward, Shuffle, Repeat,
   Heart, Volume2, VolumeX, Search, Music, Loader2, Maximize2, Minimize2, X,
 } from 'lucide-react'
-import { usePlayer } from '@/contexts/PlayerContext'
+import { usePlayer, usePlayerProgress } from '@/contexts/PlayerContext'
 import { useNowPlaying } from '@/contexts/NowPlayingContext'
 import { useAppSettings } from '@/hooks/useAppSettings'
 import { useLyrics } from '@/hooks/useLyrics'
@@ -23,11 +23,12 @@ const noDrag = { WebkitAppRegion: 'no-drag' } as React.CSSProperties
 
 export default function NowPlaying() {
   const player = usePlayer()
+  const { progress, duration: liveDuration, setProgress } = usePlayerProgress()
   const { expanded, close } = useNowPlaying()
   const { settings } = useAppSettings()
   const track = player.currentTrack
   const lyrics = useLyrics(track, expanded && settings.showLyrics)
-  const duration = player.duration || track?.duration || 0
+  const duration = liveDuration || track?.duration || 0
   const [fullscreen, setFullscreen] = useState(false)
 
   useEffect(() => {
@@ -172,16 +173,16 @@ export default function NowPlaying() {
               <div className="now-playing-progress" style={sliderTheme}>
                 <PlayerSlider
                   ariaLabel="播放进度"
-                  value={player.progress}
+                  value={progress}
                   max={duration}
-                  onChange={player.setProgress}
+                  onChange={setProgress}
                   disabled={duration <= 0}
                   formatValue={formatTime}
                   variant="progress"
                 />
                 <div className="now-playing-time">
-                  <span>{formatTime(player.progress)}</span>
-                  <span>-{formatTime(Math.max(duration - player.progress, 0))}</span>
+                  <span>{formatTime(progress)}</span>
+                  <span>-{formatTime(Math.max(duration - progress, 0))}</span>
                 </div>
               </div>
 
@@ -244,7 +245,7 @@ export default function NowPlaying() {
               transition={{ ...spring, delay: 0.16 }}
             >
               {settings.showLyrics ? (
-                <LyricsPanel lyrics={lyrics} track={track} onSeek={player.setProgress} currentTime={player.progress} />
+                <LyricsPanel lyrics={lyrics} track={track} onSeek={setProgress} currentTime={progress} />
               ) : (
                 <Centered>
                   <Music size={42} strokeWidth={1.25} />
