@@ -1,7 +1,7 @@
 {
   "name": "bilimusic",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "BiliMusic - 基于 Bilibili 的桌面音乐播放器",
   "author": "Hanversion",
   "type": "module",
@@ -79,7 +79,10 @@
       "artifactName": "${productName}-Setup-${version}-${arch}.${ext}"
     },
     "mac": {
-      "target": ["dmg", "zip"],
+      "target": [
+        "dmg",
+        "zip"
+      ],
       "icon": "electron/icon.png",
       "category": "public.app-category.music",
       "artifactName": "${productName}-${version}-${arch}.${ext}"
@@ -88,7 +91,10 @@
       "title": "${productName} ${version}"
     },
     "linux": {
-      "target": ["AppImage", "deb"],
+      "target": [
+        "AppImage",
+        "deb"
+      ],
       "icon": "electron/icon.png",
       "category": "AudioVideo",
       "maintainer": "Hanversion <hanversion@gmail.com>",
