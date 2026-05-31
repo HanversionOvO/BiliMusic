@@ -29,31 +29,50 @@ function activeIndexFor(lines: LyricLine[], t: number): number {
 export default function LyricsView({ lines, currentTime, synced, onSeek }: LyricsViewProps) {
   const viewportRef = useRef<HTMLDivElement>(null)
   const lineRefs = useRef<(HTMLDivElement | null)[]>([])
-  const [y, setY] = useState(0)
+  const userScrollingRef = useRef(false)
+  const userScrollTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const [showScrollbar, setShowScrollbar] = useState(false)
 
   const active = synced ? activeIndexFor(lines, currentTime) : -1
   const posIndex = Math.max(active, 0)
 
-  // 当前行变化 → 计算位移使其垂直居中（spring 动画交给 motion）
-  useLayoutEffect(() => {
-    if (!synced) return
+  const scrollActiveLineIntoView = () => {
     const vp = viewportRef.current
     const el = lineRefs.current[posIndex]
     if (!vp || !el) return
-    setY(vp.clientHeight / 2 - (el.offsetTop + el.offsetHeight / 2))
+    const nextTop = el.offsetTop + el.offsetHeight / 2 - vp.clientHeight / 2
+    vp.scrollTo({ top: Math.max(0, nextTop), behavior: 'smooth' })
+  }
+
+  // 当前行变化 → 自动滚动到视口中间；用户手动滚动时短暂让出控制权。
+  useLayoutEffect(() => {
+    if (!synced) return
+    if (userScrollingRef.current) return
+    scrollActiveLineIntoView()
   }, [posIndex, lines, synced])
 
   useEffect(() => {
     if (!synced) return
-    const recompute = () => {
-      const vp = viewportRef.current
-      const el = lineRefs.current[posIndex]
-      if (!vp || !el) return
-      setY(vp.clientHeight / 2 - (el.offsetTop + el.offsetHeight / 2))
-    }
+    const recompute = () => scrollActiveLineIntoView()
     window.addEventListener('resize', recompute)
     return () => window.removeEventListener('resize', recompute)
   }, [posIndex, synced])
+
+  useEffect(() => {
+    return () => {
+      if (userScrollTimerRef.current) clearTimeout(userScrollTimerRef.current)
+    }
+  }, [])
+
+  const markUserScrolling = () => {
+    userScrollingRef.current = true
+    setShowScrollbar(true)
+    if (userScrollTimerRef.current) clearTimeout(userScrollTimerRef.current)
+    userScrollTimerRef.current = setTimeout(() => {
+      userScrollingRef.current = false
+      setShowScrollbar(false)
+    }, 2600)
+  }
 
   const fade = 'linear-gradient(to bottom, transparent 0%, #000 13%, #000 84%, transparent 100%)'
 
@@ -61,9 +80,11 @@ export default function LyricsView({ lines, currentTime, synced, onSeek }: Lyric
   if (!synced) {
     return (
       <div
+        className={`lyrics-scroll ${showScrollbar ? 'is-scrolling' : ''}`}
         style={{
           height: '100%',
           overflowY: 'auto',
+          overflowX: 'hidden',
           maskImage: fade,
           WebkitMaskImage: fade,
           padding: '12% 4px',
@@ -94,18 +115,24 @@ export default function LyricsView({ lines, currentTime, synced, onSeek }: Lyric
   return (
     <div
       ref={viewportRef}
+      className={`lyrics-scroll ${showScrollbar ? 'is-scrolling' : ''}`}
+      onWheel={markUserScrolling}
+      onTouchMove={markUserScrolling}
       style={{
         position: 'relative',
         height: '100%',
-        overflow: 'hidden',
+        overflowY: 'auto',
+        overflowX: 'hidden',
+        overscrollBehavior: 'contain',
         maskImage: fade,
         WebkitMaskImage: fade,
       }}
     >
       <motion.div
-        animate={{ y }}
-        transition={{ type: 'spring', stiffness: 118, damping: 23, mass: 0.9 }}
-        style={{ position: 'absolute', left: 0, right: 0, top: 0 }}
+        initial={{ opacity: 0, y: 18 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.36, ease: [0.22, 1, 0.36, 1] }}
+        style={{ padding: '36% 0' }}
       >
         {lines.map((l, i) => {
           const isActive = i === active

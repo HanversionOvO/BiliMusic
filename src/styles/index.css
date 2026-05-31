@@ -1931,6 +1931,35 @@ body {
   min-height: 0;
 }
 
+.lyrics-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.lyrics-scroll::-webkit-scrollbar {
+  width: 7px;
+  height: 0;
+}
+
+.lyrics-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.lyrics-scroll::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: transparent;
+}
+
+.lyrics-scroll.is-scrolling,
+.lyrics-scroll:hover {
+  scrollbar-color: rgba(255, 255, 255, 0.24) transparent;
+}
+
+.lyrics-scroll.is-scrolling::-webkit-scrollbar-thumb,
+.lyrics-scroll:hover::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+}
+
 .lyrics-panel__hint {
   color: rgba(255, 255, 255, 0.42);
   font-size: 12px;
