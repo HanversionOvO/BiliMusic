@@ -1,4 +1,5 @@
 import { app, BrowserWindow, Tray, ipcMain, nativeImage, net, protocol, screen, session, shell } from 'electron'
+import fs from 'fs'
 import path from 'path'
 import { fileURLToPath, pathToFileURL } from 'url'
 import { registerBiliApiHandlers } from './biliApi'
@@ -119,6 +120,34 @@ function createTrayIcon() {
   const trayIcon = isHarmonyOS ? loadAppIcon('tray.png') : loadAppIcon()
   // 托盘图标尺寸较小，缩放到 32px 以兼顾标准与高 DPI 显示
   return trayIcon.resize({ width: 32, height: 32 })
+}
+
+function persistentStoreFile() {
+  return path.join(app.getPath('userData'), 'renderer-persistent-store.json')
+}
+
+function readPersistentStore(): Record<string, string> {
+  try {
+    const file = persistentStoreFile()
+    if (!fs.existsSync(file)) return {}
+    const parsed = JSON.parse(fs.readFileSync(file, 'utf8'))
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {}
+    return Object.fromEntries(
+      Object.entries(parsed).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
+    )
+  } catch {
+    return {}
+  }
+}
+
+function writePersistentStore(store: Record<string, string>) {
+  try {
+    const file = persistentStoreFile()
+    fs.mkdirSync(path.dirname(file), { recursive: true })
+    fs.writeFileSync(file, JSON.stringify(store, null, 2))
+  } catch {
+    // Persistence failures should not block the renderer.
+  }
 }
 
 function showMainWindow() {
@@ -565,6 +594,25 @@ ipcMain.on('tray:player-state', (_event, state: TrayPlayerState) => {
 })
 ipcMain.on('tray:command', (_event, command: TrayCommand) => sendTrayCommand(command))
 ipcMain.handle('tray:get-state', () => trayPlayerState)
+ipcMain.on('persistent-storage:get', (event, key: string) => {
+  if (typeof key !== 'string') {
+    event.returnValue = null
+    return
+  }
+  event.returnValue = readPersistentStore()[key] ?? null
+})
+ipcMain.on('persistent-storage:set', (_event, key: string, value: string) => {
+  if (typeof key !== 'string' || typeof value !== 'string') return
+  const store = readPersistentStore()
+  store[key] = value
+  writePersistentStore(store)
+})
+ipcMain.on('persistent-storage:remove', (_event, key: string) => {
+  if (typeof key !== 'string') return
+  const store = readPersistentStore()
+  delete store[key]
+  writePersistentStore(store)
+})
 // 用系统默认浏览器打开外部链接（仅放行 http/https，避免任意协议执行）
 ipcMain.handle('shell:open-external', (_event, url: string) => {
   if (typeof url === 'string' && /^https?:\/\//i.test(url)) return shell.openExternal(url)

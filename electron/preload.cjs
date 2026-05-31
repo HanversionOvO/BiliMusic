@@ -57,6 +57,12 @@ const lyricsApi = {
     ipcRenderer.invoke('lyrics:get', id, format),
 }
 
+const persistentStorage = {
+  getItem: (key) => ipcRenderer.sendSync('persistent-storage:get', key),
+  setItem: (key, value) => ipcRenderer.send('persistent-storage:set', key, value),
+  removeItem: (key) => ipcRenderer.send('persistent-storage:remove', key),
+}
+
 contextBridge.exposeInMainWorld('electronAPI', {
   minimize: () => ipcRenderer.send('window:minimize'),
   maximize: () => ipcRenderer.send('window:maximize'),
@@ -99,6 +105,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   webdavPut: (relPath, content, etag) => ipcRenderer.invoke('webdav:put', relPath, content, etag),
   clearWebdav: () => ipcRenderer.invoke('webdav:clear'),
   platform: process.platform,
+  persistentStorage,
   biliApi,
   lyricsApi,
 })

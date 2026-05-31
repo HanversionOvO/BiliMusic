@@ -1,4 +1,5 @@
 import type { AppSettings, Playlist, Tombstone, Track } from '@/types'
+import { readStoredItem, writeStoredItem } from '@/utils/persistentStorage'
 
 const RECENT_KEY = 'bilimusic_recent'
 const FAVORITES_KEY = 'bilimusic_favorites'
@@ -193,7 +194,7 @@ export function addTrackToPlaylist(playlistId: string, track: Track): Playlist |
 
 export function loadAppSettings(): AppSettings {
   try {
-    const raw = localStorage.getItem(SETTINGS_KEY)
+    const raw = readStoredItem(SETTINGS_KEY)
     if (!raw) return DEFAULT_APP_SETTINGS
     return { ...DEFAULT_APP_SETTINGS, ...JSON.parse(raw) }
   } catch {
@@ -203,7 +204,7 @@ export function loadAppSettings(): AppSettings {
 
 export function saveAppSettings(settings: AppSettings) {
   try {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings))
+    writeStoredItem(SETTINGS_KEY, JSON.stringify(settings))
     notifySettingsChanged()
   } catch {
     // ignore

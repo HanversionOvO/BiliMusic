@@ -108,6 +108,34 @@ function shuffleArray<T>(arr: T[]): T[] {
   return a
 }
 
+function shouldIgnoreSpaceShortcut(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false
+  if (target.isContentEditable) return true
+  const tagName = target.tagName.toLowerCase()
+  if (['input', 'textarea', 'select', 'button'].includes(tagName)) return true
+  const role = target.getAttribute('role')
+  return Boolean(role && ['button', 'textbox', 'searchbox', 'slider', 'switch', 'combobox'].includes(role))
+}
+
+function getArtworkType(url: string): string | undefined {
+  if (/\.webp($|\?)/i.test(url)) return 'image/webp'
+  if (/\.png($|\?)/i.test(url)) return 'image/png'
+  if (/\.(jpe?g)($|\?)/i.test(url)) return 'image/jpeg'
+  return undefined
+}
+
+function setMediaSessionAction(action: MediaSessionAction, handler: MediaSessionActionHandler | null): void {
+  try {
+    navigator.mediaSession.setActionHandler(action, handler)
+  } catch {
+    // Some Chromium/Electron platform builds expose only part of the action set.
+  }
+}
+
+function clearMediaSessionActions(actions: MediaSessionAction[]): void {
+  actions.forEach(action => setMediaSessionAction(action, null))
+}
+
 export function PlayerProvider({ children }: { children: ReactNode }) {
   const { settings } = useAppSettings()
   const restoredRef = useRef(loadPersistedPlayerState())
@@ -128,6 +156,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const currentIndexRef = useRef(restoredRef.current.currentIndex)
   const shouldAutoplayRef = useRef(Boolean(restoredRef.current.currentTrack && restoredRef.current.wasPlaying))
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const progressRef = useRef(progress)
+  const durationRef = useRef(duration)
 
   const showToast = useCallback((msg: string) => {
     setToast(msg)
@@ -172,6 +202,14 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     }
     localStorage.setItem('bilimusic_volume', String(volume))
   }, [volume, isMuted])
+
+  useEffect(() => {
+    progressRef.current = progress
+  }, [progress])
+
+  useEffect(() => {
+    durationRef.current = duration
+  }, [duration])
 
   const handleTrackEnd = useCallback(() => {
     const displayQueue = isShuffled ? shuffledQueueRef.current : queue
@@ -528,6 +566,94 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       if (command === 'prev') prev()
     })
   }, [next, prev, togglePlay])
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.repeat || event.code !== 'Space' || shouldIgnoreSpaceShortcut(event.target)) return
+      event.preventDefault()
+      togglePlay()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [togglePlay])
+
+  useEffect(() => {
+    if (!('mediaSession' in navigator)) return
+
+    setMediaSessionAction('play', () => {
+      if (!isPlaying) togglePlay()
+    })
+    setMediaSessionAction('pause', () => {
+      if (isPlaying) togglePlay()
+    })
+    setMediaSessionAction('stop', pause)
+    setMediaSessionAction('nexttrack', next)
+    setMediaSessionAction('previoustrack', prev)
+    setMediaSessionAction('seekbackward', (details) => {
+      const step = details.seekOffset || 10
+      handleSetProgress(Math.max(0, progressRef.current - step))
+    })
+    setMediaSessionAction('seekforward', (details) => {
+      const step = details.seekOffset || 10
+      const nextProgress = durationRef.current > 0
+        ? Math.min(durationRef.current, progressRef.current + step)
+        : progressRef.current + step
+      handleSetProgress(nextProgress)
+    })
+    setMediaSessionAction('seekto', (details) => {
+      if (typeof details.seekTime === 'number') handleSetProgress(Math.max(0, details.seekTime))
+    })
+
+    return () => clearMediaSessionActions([
+      'play',
+      'pause',
+      'stop',
+      'nexttrack',
+      'previoustrack',
+      'seekbackward',
+      'seekforward',
+      'seekto',
+    ])
+  }, [handleSetProgress, isPlaying, next, pause, prev, togglePlay])
+
+  useEffect(() => {
+    if (!('mediaSession' in navigator) || typeof MediaMetadata === 'undefined') return
+
+    if (!currentTrack) {
+      navigator.mediaSession.metadata = null
+      navigator.mediaSession.playbackState = 'none'
+      return
+    }
+
+    const artwork = currentTrack.coverUrl
+      ? [{ src: currentTrack.coverUrl, sizes: '512x512', type: getArtworkType(currentTrack.coverUrl) }]
+      : undefined
+
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: currentTrack.title || '未命名歌曲',
+      artist: currentTrack.artist || 'BiliMusic',
+      album: 'BiliMusic',
+      artwork,
+    })
+  }, [currentTrack?.artist, currentTrack?.coverUrl, currentTrack?.id, currentTrack?.title])
+
+  useEffect(() => {
+    if (!('mediaSession' in navigator)) return
+    navigator.mediaSession.playbackState = currentTrack ? (isPlaying ? 'playing' : 'paused') : 'none'
+  }, [currentTrack, isPlaying])
+
+  useEffect(() => {
+    if (!('mediaSession' in navigator) || !currentTrack || duration <= 0) return
+    try {
+      navigator.mediaSession.setPositionState({
+        duration,
+        playbackRate: 1,
+        position: Math.min(Math.max(progress, 0), duration),
+      })
+    } catch {
+      // Invalid transient durations/progress values should not affect playback.
+    }
+  }, [currentTrack, duration, progress])
 
   // 稳定的播放器值：进度（高频）不在其中，故进度跳动不会改变此引用，
   // usePlayer() 的消费者（列表行等）不会因每秒 4 次的进度更新而重渲染。

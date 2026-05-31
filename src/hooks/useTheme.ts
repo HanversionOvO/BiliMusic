@@ -1,5 +1,8 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import type { ThemeMode } from '@/types'
+import { readStoredItem, writeStoredItem } from '@/utils/persistentStorage'
+
+const THEME_MODE_KEY = 'theme-mode'
 
 function getSystemTheme(): 'light' | 'dark' {
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
@@ -11,7 +14,7 @@ function applyTheme(mode: ThemeMode) {
 }
 
 function readStoredMode(): ThemeMode {
-  return (localStorage.getItem('theme-mode') as ThemeMode) || 'system'
+  return (readStoredItem(THEME_MODE_KEY) as ThemeMode) || 'system'
 }
 
 // 首次加载时同步设置主题，避免 FOUC
@@ -24,7 +27,7 @@ export function useTheme() {
 
   useEffect(() => {
     applyTheme(mode)
-    localStorage.setItem('theme-mode', mode)
+    writeStoredItem(THEME_MODE_KEY, mode)
   }, [mode])
 
   useEffect(() => {

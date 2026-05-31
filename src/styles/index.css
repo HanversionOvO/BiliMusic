@@ -1472,6 +1472,23 @@ body {
   font-weight: 650;
 }
 
+.apple-search-retry {
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-full);
+  background: var(--glass-bg);
+  color: var(--color-primary);
+  cursor: pointer;
+  font: 760 12px/1 var(--font-body);
+  transition: transform var(--duration-fast) ease, border-color var(--duration-fast) ease;
+}
+
+.apple-search-retry:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--color-primary) 36%, var(--glass-border));
+}
+
 .spin {
   animation: spin 1s linear infinite;
 }
@@ -2757,7 +2774,7 @@ body {
 
 .settings-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(340px, 0.78fr);
+  grid-template-columns: repeat(2, minmax(360px, 1fr));
   gap: 24px;
   align-items: start;
 }
@@ -2827,7 +2844,7 @@ body {
 
 .settings-row__control {
   flex: 0 0 auto;
-  max-width: min(390px, 54vw);
+  max-width: min(390px, 46vw);
 }
 
 .settings-segment {

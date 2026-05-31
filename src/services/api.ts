@@ -63,10 +63,11 @@ export async function searchVideo(keyword: string, page = 1, pageSize = 20): Pro
   // 统一走渲染进程浏览器 fetch：主进程 net.fetch 会被 B站反爬拦截（-352）
   const { searchVideo: rendererSearch } = await import('@/services/bilibiliApi')
   const data = await rendererSearch(keyword, page, pageSize)
+  const totalResults = data.numResults || 0
   return {
     items: data.result?.map(mapItem) || [],
-    totalPages: data.numPages || 0,
-    totalResults: data.numResults || 0,
+    totalPages: data.numPages || Math.ceil(totalResults / pageSize),
+    totalResults,
   }
 }
 
@@ -248,7 +249,8 @@ export async function searchUsers(keyword: string, page = 1, pageSize = 20): Pro
     videoCount: u.videos || 0,
     level: u.level || 0,
   }))
-  return { items, totalPages: data.numPages || 0, totalResults: data.numResults || 0 }
+  const totalResults = data.numResults || 0
+  return { items, totalPages: data.numPages || Math.ceil(totalResults / pageSize), totalResults }
 }
 
 // ===== UP主 投稿视频 =====

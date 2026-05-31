@@ -19,7 +19,7 @@ type SelectedUser = { mid: number; name: string; avatar: string }
 const pageMotion = {
   initial: { opacity: 0, y: 18 },
   animate: { opacity: 1, y: 0 },
-  transition: { duration: 0.36, ease: [0.22, 1, 0.36, 1] },
+  transition: { duration: 0.36, ease: [0.22, 1, 0.36, 1] as const },
 }
 
 const listMotion = {
@@ -30,6 +30,27 @@ const listMotion = {
 const itemMotion = {
   initial: { opacity: 0, y: 12, scale: 0.985 },
   animate: { opacity: 1, y: 0, scale: 1 },
+}
+
+function getScrollParent(element: HTMLElement | null): HTMLElement | null {
+  let node = element?.parentElement ?? null
+  while (node) {
+    const style = window.getComputedStyle(node)
+    if (/(auto|scroll|overlay)/.test(`${style.overflowY}${style.overflow}`)) return node
+    node = node.parentElement
+  }
+  return null
+}
+
+function getScrollTargets(element: HTMLElement | null): Array<HTMLElement | Window | Document> {
+  const targets: Array<HTMLElement | Window | Document> = [window, document]
+  let node = element?.parentElement ?? null
+  while (node) {
+    const style = window.getComputedStyle(node)
+    if (/(auto|scroll|overlay)/.test(`${style.overflowY}${style.overflow}`)) targets.push(node)
+    node = node.parentElement
+  }
+  return [...new Set(targets)]
 }
 
 function formatCount(n: number): string {
@@ -79,11 +100,15 @@ export default function SearchPage() {
   const [loading, setLoading] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [loadMoreError, setLoadMoreError] = useState<string | null>(null)
+  const [reachedEnd, setReachedEnd] = useState(false)
   const [totalResults, setTotalResults] = useState(0)
   const pageRef = useRef(1)
   const totalPagesRef = useRef(0)
   const currentQueryRef = useRef('')
+  const pageRootRef = useRef<HTMLDivElement>(null)
   const sentinelRef = useRef<HTMLDivElement>(null)
+  const loadingMoreRef = useRef(false)
 
   const clearSearch = useCallback(() => {
     setQuery('')
@@ -92,6 +117,8 @@ export default function SearchPage() {
     setUserResults([])
     setSelectedUser(null)
     setError(null)
+    setLoadMoreError(null)
+    setReachedEnd(false)
     setTotalResults(0)
     pageRef.current = 1
     totalPagesRef.current = 0
@@ -103,6 +130,8 @@ export default function SearchPage() {
     const normalizedKeyword = keyword.trim()
     setLoading(true)
     setError(null)
+    setLoadMoreError(null)
+    setReachedEnd(false)
     setSelectedUser(null)
     setResults([])
     setUserResults([])
@@ -151,46 +180,107 @@ export default function SearchPage() {
   }, [searchType, query, executeSearch])
 
   const loadMore = useCallback(async () => {
-    if (loadingMore || pageRef.current >= totalPagesRef.current) return
+    const loadedCount = resultType === 'video' ? results.length : userResults.length
+    const hasMore = !reachedEnd && (pageRef.current < totalPagesRef.current || loadedCount > 0 || (totalResults > 0 && loadedCount < totalResults))
+    if (loading || loadingMore || loadingMoreRef.current || !currentQueryRef.current || !hasMore) return
+    loadingMoreRef.current = true
     setLoadingMore(true)
+    setLoadMoreError(null)
     try {
       const nextPage = pageRef.current + 1
       if (resultType === 'video') {
         const data = await searchVideo(currentQueryRef.current, nextPage)
         pageRef.current = nextPage
+        totalPagesRef.current = data.items.length === 0 ? nextPage : data.totalPages
+        setTotalResults(data.totalResults)
+        if (data.items.length === 0) setReachedEnd(true)
         setResults(prev => [...prev, ...data.items])
       } else {
         const data = await searchUsers(currentQueryRef.current, nextPage)
         pageRef.current = nextPage
+        totalPagesRef.current = data.items.length === 0 ? nextPage : data.totalPages
+        setTotalResults(data.totalResults)
+        if (data.items.length === 0) setReachedEnd(true)
         setUserResults(prev => [...prev, ...data.items])
       }
-    } catch {
-      // 触底加载失败时保留现有结果，避免打断浏览。
+    } catch (e: any) {
+      setLoadMoreError(e?.message || '加载更多失败')
     } finally {
+      loadingMoreRef.current = false
       setLoadingMore(false)
     }
-  }, [loadingMore, resultType])
+  }, [loading, loadingMore, reachedEnd, resultType, results.length, totalResults, userResults.length])
 
   useEffect(() => {
     const sentinel = sentinelRef.current
+    const pageRoot = pageRootRef.current
     if (!sentinel || !hasSearched || selectedUser) return
+
+    const scrollRoot = getScrollParent(sentinel)
+    const loadedCount = resultType === 'video' ? results.length : userResults.length
+    const canLoadMore = () => {
+      const hasMore = !reachedEnd && (pageRef.current < totalPagesRef.current || loadedCount > 0 || (totalResults > 0 && loadedCount < totalResults))
+      return hasMore && !loading && !loadingMore && !loadingMoreRef.current
+    }
+    const checkNearBottom = () => {
+      if (!canLoadMore()) return
+      if (pageRoot && scrollRoot) {
+        const distance = pageRoot.getBoundingClientRect().bottom - scrollRoot.getBoundingClientRect().bottom
+        if (distance < 720) loadMore()
+        return
+      }
+      if (pageRoot) {
+        const distance = pageRoot.getBoundingClientRect().bottom - window.innerHeight
+        if (distance < 720) loadMore()
+        return
+      }
+      const distance = sentinel.getBoundingClientRect().top - window.innerHeight
+      if (distance < 720) loadMore()
+    }
 
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting) {
+        if (entries[0].isIntersecting && canLoadMore()) {
           loadMore()
         }
       },
-      { rootMargin: '240px' },
+      { root: scrollRoot, rootMargin: '520px 0px' },
     )
     observer.observe(sentinel)
-    return () => observer.disconnect()
-  }, [hasSearched, selectedUser, loadMore, results.length, userResults.length])
+
+    const scrollTargets = getScrollTargets(sentinel)
+    let raf = 0
+    const onScroll = () => {
+      if (raf) return
+      raf = window.requestAnimationFrame(() => {
+        raf = 0
+        checkNearBottom()
+      })
+    }
+    scrollTargets.forEach(target => target.addEventListener('scroll', onScroll, { passive: true, capture: true }))
+    window.addEventListener('wheel', onScroll, { passive: true, capture: true })
+    window.addEventListener('touchmove', onScroll, { passive: true, capture: true })
+    window.addEventListener('resize', onScroll, { passive: true })
+    checkNearBottom()
+    const interval = window.setInterval(checkNearBottom, 700)
+
+    return () => {
+      observer.disconnect()
+      scrollTargets.forEach(target => target.removeEventListener('scroll', onScroll, { capture: true }))
+      window.removeEventListener('wheel', onScroll, { capture: true })
+      window.removeEventListener('touchmove', onScroll, { capture: true })
+      window.removeEventListener('resize', onScroll)
+      window.clearInterval(interval)
+      if (raf) window.cancelAnimationFrame(raf)
+    }
+  }, [hasSearched, selectedUser, loading, loadingMore, loadMore, reachedEnd, resultType, results.length, totalResults, userResults.length])
 
   const hasAnyResults = resultType === 'video' ? results.length > 0 : userResults.length > 0
+  const loadedCount = resultType === 'video' ? results.length : userResults.length
+  const hasMoreResults = hasAnyResults && !reachedEnd && (pageRef.current < totalPagesRef.current || (totalResults > 0 && loadedCount < totalResults))
 
   return (
-    <motion.div className="apple-search-page" {...pageMotion}>
+    <motion.div ref={pageRootRef} className="apple-search-page" {...pageMotion}>
       <section className="apple-search-hero">
         <div className="apple-search-hero__shine" />
         <div className="apple-search-titlebar">
@@ -307,12 +397,23 @@ export default function SearchPage() {
             )}
 
             <div ref={sentinelRef} style={{ height: 1 }} />
-            {loadingMore && (
+            {loadingMore ? (
               <div className="apple-search-more">
                 <Loader2 size={22} className="spin" />
               </div>
-            )}
-            {pageRef.current >= totalPagesRef.current && hasAnyResults && (
+            ) : loadMoreError && hasAnyResults ? (
+              <div className="apple-search-end">
+                <button type="button" className="apple-search-retry" onClick={loadMore}>
+                  {loadMoreError}，点击重试
+                </button>
+              </div>
+            ) : hasMoreResults ? (
+              <div className="apple-search-end">
+                <button type="button" className="apple-search-retry" onClick={loadMore}>
+                  继续加载更多
+                </button>
+              </div>
+            ) : hasAnyResults && (
               <div className="apple-search-end">已加载全部 {totalResults.toLocaleString()} 条结果</div>
             )}
           </motion.section>

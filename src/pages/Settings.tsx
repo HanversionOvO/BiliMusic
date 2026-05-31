@@ -226,6 +226,66 @@ export default function Settings() {
               <ToggleSwitch checked={settings.showLyrics} onChange={() => setAppSettings({ showLyrics: !settings.showLyrics })} />
             </SettingsRow>
           </SettingsGroup>
+
+          <SettingsGroup title="歌单迁移" icon={<FileDown size={20} />}>
+            <div className="settings-actions settings-actions--stacked">
+              <button type="button" onClick={exportPlaylists}>
+                <FileDown size={14} />
+                导出歌单
+              </button>
+              <button type="button" onClick={() => importInputRef.current?.click()}>
+                <FileUp size={14} />
+                导入歌单
+              </button>
+              <input
+                ref={importInputRef}
+                type="file"
+                accept="application/json,.json"
+                hidden
+                onChange={(e) => importPlaylists(e.target.files?.[0])}
+              />
+              {playlistTransferMessage && <span>{playlistTransferMessage}</span>}
+            </div>
+          </SettingsGroup>
+
+          <SettingsGroup title="账号" icon={<UserRound size={20} />}>
+            <div className="settings-account">
+              <div className="settings-account__avatar">
+                {isLoggedIn && avatar ? <img src={avatar} alt="" /> : <UserRound size={22} />}
+              </div>
+              <div className="settings-account__body">
+                <span className={isLoggedIn ? 'is-online' : ''}>{isLoggedIn ? '已登录' : '未登录'}</span>
+                <strong>{isLoggedIn ? username : 'BiliBili 账号'}</strong>
+              </div>
+              <button type="button" onClick={isLoggedIn ? logout : () => setShowLogin(true)}>
+                {isLoggedIn ? <LogOut size={14} /> : <LogIn size={14} />}
+                {isLoggedIn ? '退出' : '登录'}
+              </button>
+            </div>
+          </SettingsGroup>
+
+          <SettingsGroup title="关于" icon={<Info size={20} />}>
+            <SettingsRow label="版本">
+              <span className="settings-version">BiliMusic v{appVersion}</span>
+            </SettingsRow>
+            <div className="settings-actions">
+              <button type="button" onClick={checkUpdate}>
+                <SettingsIcon size={14} />
+                检查更新
+              </button>
+              {updateAction && (
+                <button type="button" onClick={runUpdateAction}>
+                  <RefreshCw size={14} />
+                  {updateAction === 'restart' ? '重启并安装' : '立即重载'}
+                </button>
+              )}
+              <button type="button" onClick={() => window.electronAPI?.openExternal?.('https://github.com/HanversionOvO/BiliMusic')}>
+                <Github size={14} />
+                关于项目
+              </button>
+              {updateStatus && <span>{updateStatus}</span>}
+            </div>
+          </SettingsGroup>
         </div>
 
         <div className="settings-column">
@@ -305,63 +365,6 @@ export default function Settings() {
               </button>
               {syncMessage && <span>{syncMessage}</span>}
               {lastSync && <span>上次同步：{new Date(lastSync).toLocaleString()}</span>}
-            </div>
-            <div className="settings-actions is-divided">
-              <button type="button" onClick={exportPlaylists}>
-                <FileDown size={14} />
-                导出歌单
-              </button>
-              <button type="button" onClick={() => importInputRef.current?.click()}>
-                <FileUp size={14} />
-                导入歌单
-              </button>
-              <input
-                ref={importInputRef}
-                type="file"
-                accept="application/json,.json"
-                hidden
-                onChange={(e) => importPlaylists(e.target.files?.[0])}
-              />
-              {playlistTransferMessage && <span>{playlistTransferMessage}</span>}
-            </div>
-          </SettingsGroup>
-
-          <SettingsGroup title="账号" icon={<UserRound size={20} />}>
-            <div className="settings-account">
-              <div className="settings-account__avatar">
-                {isLoggedIn && avatar ? <img src={avatar} alt="" /> : <UserRound size={22} />}
-              </div>
-              <div className="settings-account__body">
-                <span className={isLoggedIn ? 'is-online' : ''}>{isLoggedIn ? '已登录' : '未登录'}</span>
-                <strong>{isLoggedIn ? username : 'BiliBili 账号'}</strong>
-              </div>
-              <button type="button" onClick={isLoggedIn ? logout : () => setShowLogin(true)}>
-                {isLoggedIn ? <LogOut size={14} /> : <LogIn size={14} />}
-                {isLoggedIn ? '退出' : '登录'}
-              </button>
-            </div>
-          </SettingsGroup>
-
-          <SettingsGroup title="关于" icon={<Info size={20} />}>
-            <SettingsRow label="版本">
-              <span className="settings-version">BiliMusic v{appVersion}</span>
-            </SettingsRow>
-            <div className="settings-actions">
-              <button type="button" onClick={checkUpdate}>
-                <SettingsIcon size={14} />
-                检查更新
-              </button>
-              {updateAction && (
-                <button type="button" onClick={runUpdateAction}>
-                  <RefreshCw size={14} />
-                  {updateAction === 'restart' ? '重启并安装' : '立即重载'}
-                </button>
-              )}
-              <button type="button" onClick={() => window.electronAPI?.openExternal?.('https://github.com/HanversionOvO/BiliMusic')}>
-                <Github size={14} />
-                关于项目
-              </button>
-              {updateStatus && <span>{updateStatus}</span>}
             </div>
           </SettingsGroup>
         </div>

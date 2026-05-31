@@ -66,6 +66,12 @@ interface LyricsApi {
   get: (id: string | number, format?: 'lrc' | 'qrc' | 'ksc') => Promise<OiapiLyricData | null>
 }
 
+interface PersistentStorageApi {
+  getItem: (key: string) => string | null
+  setItem: (key: string, value: string) => void
+  removeItem: (key: string) => void
+}
+
 export interface TrayPlayerState {
   hasTrack: boolean
   title: string
@@ -137,6 +143,7 @@ declare global {
       webdavPut?: (relPath: string, content: string, etag?: string) => Promise<WebdavResult>
       clearWebdav?: () => Promise<{ ok: boolean }>
       platform: string
+      persistentStorage?: PersistentStorageApi
       biliApi: BiliApi
       lyricsApi: LyricsApi
     }
