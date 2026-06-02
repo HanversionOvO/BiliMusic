@@ -608,22 +608,29 @@ export async function extractAudioFromSearch(
 export async function extractAudioFromVideo(
   bvid: string,
   fallback?: { aid?: string | number; cid?: string | number },
+  cid?: number,
 ): Promise<TrackSource> {
   try {
     const detail = await getVideoDetail(bvid)
-    const playData = await getPlayUrl(bvid, detail.cid)
+    // 分P视频：cid 指定要播放的那个分P，否则默认第 1 个分P
+    const targetCid = cid || detail.cid
+    const playData = await getPlayUrl(bvid, targetCid)
     const audioUrl = getBestAudioUrl(playData)
 
     const bestAudio = [...playData.dash.audio].sort((a, b) => b.bandwidth - a.bandwidth)[0]
 
+    // 时长用「当前分P」的时长，而非所有分P总时长，避免进度条与实际播放错位
+    const targetPage = detail.pages?.find(p => p.cid === targetCid)
+    const duration = targetPage?.duration || detail.duration
+
     return {
       bvid: detail.bvid,
       aid: detail.aid,
-      cid: detail.cid,
+      cid: targetCid,
       title: detail.title,
       artist: detail.owner.name,
       coverUrl: toHttpsUrl(detail.pic),
-      duration: detail.duration,
+      duration,
       audioUrl,
       audioQuality: bestAudio.quality,
       audioMimeType: bestAudio.mimeType,

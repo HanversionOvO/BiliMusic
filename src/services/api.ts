@@ -6,6 +6,7 @@
  */
 
 import type { TrackSource } from '@/services/bilibiliApi'
+import type { Track } from '@/types'
 
 function isElectron(): boolean {
   return !!window.electronAPI?.biliApi
@@ -170,10 +171,58 @@ export async function getVideoComments(
 export async function extractAudio(
   bvid: string,
   fallback?: { aid?: string | number; cid?: string | number },
+  cid?: number,
 ): Promise<TrackSource> {
   // 统一走渲染进程浏览器 fetch：主进程 net.fetch 会被 B站反爬拦截（-352）
   const { extractAudioFromVideo } = await import('@/services/bilibiliApi')
-  return extractAudioFromVideo(bvid, fallback)
+  return extractAudioFromVideo(bvid, fallback, cid)
+}
+
+/**
+ * 把一个视频展开成分P曲目列表
+ *
+ * 分P(多P合集)视频含多个 P，每个 P 是独立可播放单元。
+ * - 单P视频：返回 1 条，顺便补正 cid / 时长（搜索列表给的是所有分P总时长）。
+ * - 多P视频：每个分P映射为一条 Track。P1 沿用原 id(=bvid)以保持当前播放不被打断、
+ *   不破坏已存的收藏/最近播放数据；P2 起用 `${bvid}::p${n}` 后缀 id。
+ */
+export async function expandTrackParts(track: Track): Promise<Track[]> {
+  const { getVideoDetail } = await import('@/services/bilibiliApi')
+  const bvid = track.bvid || track.id
+  const detail = await getVideoDetail(bvid)
+  const pages = detail.pages || []
+
+  if (pages.length <= 1) {
+    return [{
+      ...track,
+      cid: detail.cid,
+      duration: detail.duration || track.duration,
+      page: 1,
+    }]
+  }
+
+  return pages.map((p, i) => {
+    // 标题优先用分P自己的名字(通常即歌名)，避免长合集名当前缀把歌名挤没；
+    // 分P无名字时才退回「合集名 PN」
+    const partName = p.part?.trim()
+    const title = partName || `${detail.title} P${i + 1}`
+    if (i === 0) {
+      return { ...track, title, cid: p.cid, duration: p.duration, page: 1 }
+    }
+    return {
+      id: `${bvid}::p${i + 1}`,
+      title,
+      artist: track.artist || detail.owner.name,
+      coverUrl: track.coverUrl || detail.pic,
+      duration: p.duration,
+      videoUrl: `https://www.bilibili.com/video/${bvid}?p=${i + 1}`,
+      bvid,
+      cid: p.cid,
+      page: i + 1,
+      playCount: 0,
+      isLiked: false,
+    }
+  })
 }
 
 // ===== 下载音频 =====

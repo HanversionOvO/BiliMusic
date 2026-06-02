@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useCallback, useMemo, useRef, useEffect, type ReactNode } from 'react'
 import type { Track, RepeatMode } from '@/types'
-import { extractAudio } from '@/services/api'
+import { extractAudio, expandTrackParts } from '@/services/api'
 import { addRecentTrack, toggleFavoriteTrack, loadFavoriteTracks } from '@/utils/storage'
 import { useAppSettings } from '@/hooks/useAppSettings'
 
@@ -158,11 +158,36 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const progressRef = useRef(progress)
   const durationRef = useRef(duration)
+  const currentTrackRef = useRef<Track | null>(currentTrack)
+  // 已尝试展开分P的曲目 id，避免对同一视频重复拉取详情
+  const expandedIdsRef = useRef<Set<string>>(new Set())
 
   const showToast = useCallback((msg: string) => {
     setToast(msg)
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
     toastTimerRef.current = setTimeout(() => setToast(null), 2000)
+  }, [])
+
+  // 分P展开：若播放的视频含多个分P，把队列里这一条替换为各分P曲目
+  const maybeExpandParts = useCallback((track: Track) => {
+    if (track.page) return // 已是分P曲目
+    if (expandedIdsRef.current.has(track.id)) return
+    expandedIdsRef.current.add(track.id)
+    expandTrackParts(track).then(parts => {
+      if (parts.length <= 1) return // 单P视频：无需拆分
+      setQueue(prev => {
+        const idx = prev.findIndex(t => t.id === track.id)
+        if (idx < 0) return prev
+        const next = [...prev.slice(0, idx), ...parts, ...prev.slice(idx + 1)]
+        const curId = currentTrackRef.current?.id
+        if (curId) currentIndexRef.current = next.findIndex(t => t.id === curId)
+        return next
+      })
+      // 把当前曲目(P1)升级为带 page/cid/duration 的分P曲目
+      setCurrentTrack(prev => prev && prev.id === track.id ? parts[0] : prev)
+    }).catch(() => {
+      expandedIdsRef.current.delete(track.id) // 失败允许重试
+    })
   }, [])
 
   // 初始化 audio 元素
@@ -210,6 +235,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     durationRef.current = duration
   }, [duration])
+
+  useEffect(() => {
+    currentTrackRef.current = currentTrack
+  }, [currentTrack])
 
   const handleTrackEnd = useCallback(() => {
     const displayQueue = isShuffled ? shuffledQueueRef.current : queue
@@ -268,7 +297,9 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         const fallback = currentTrack!.aid && currentTrack!.cid
           ? { aid: currentTrack!.aid, cid: currentTrack!.cid }
           : undefined
-        const source = await extractAudio(currentTrack!.bvid || currentTrack!.id, fallback)
+        // 分P曲目带 page 时，用其 cid 取对应分P的音频流；否则默认第 1 个分P
+        const partCid = currentTrack!.page ? Number(currentTrack!.cid) || undefined : undefined
+        const source = await extractAudio(currentTrack!.bvid || currentTrack!.id, fallback, partCid)
         if (cancelled) return
         const targetProgress = progress > 0 ? progress : 0
         audio.src = source.audioUrl
@@ -317,7 +348,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     const displayQueue = isShuffled ? shuffledQueueRef.current : queue
     const idx = displayQueue.findIndex(t => t.id === track.id)
     currentIndexRef.current = idx >= 0 ? idx : 0
-  }, [isShuffled, queue])
+    maybeExpandParts(track)
+  }, [isShuffled, queue, maybeExpandParts])
 
   const pause = useCallback(() => {
     shouldAutoplayRef.current = false
@@ -448,7 +480,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     setProgress(0)
     currentIndexRef.current = 0
     setIsPlaying(true)
-  }, [])
+    maybeExpandParts(track)
+  }, [maybeExpandParts])
 
   // 下一首播放：把曲目插入到当前曲目之后（不在队列则新增；无播放则等同立即播放）
   const playNext = useCallback((track: Track) => {
