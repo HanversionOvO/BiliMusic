@@ -13,6 +13,7 @@ export default function TrackMetadataDialog({ track, onClose, onSave }: {
   const [artist, setArtist] = useState('')
   const [album, setAlbum] = useState('')
   const [coverUrl, setCoverUrl] = useState('')
+  const [previewCoverUrl, setPreviewCoverUrl] = useState('')
 
   useEffect(() => {
     if (!track) return
@@ -20,7 +21,14 @@ export default function TrackMetadataDialog({ track, onClose, onSave }: {
     setArtist(track.artist)
     setAlbum(track.album || '')
     setCoverUrl(track.coverUrl)
+    setPreviewCoverUrl(track.coverUrl)
   }, [track])
+
+  // 避免编辑 URL 时每个按键都触发一次图片请求和解码。
+  useEffect(() => {
+    const timer = window.setTimeout(() => setPreviewCoverUrl(coverUrl.trim()), 280)
+    return () => window.clearTimeout(timer)
+  }, [coverUrl])
 
   useEffect(() => {
     if (!track) return
@@ -41,17 +49,19 @@ export default function TrackMetadataDialog({ track, onClose, onSave }: {
     <AnimatePresence>
       {track && (
         <motion.div
-          className="playlist-dialog-backdrop"
+          className="playlist-dialog-backdrop metadata-dialog-backdrop"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
+          transition={{ duration: 0.12, ease: 'linear' }}
           onMouseDown={onClose}
         >
           <motion.form
             className="playlist-dialog metadata-dialog"
-            initial={{ opacity: 0, y: 18, scale: 0.97 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 18, scale: 0.97 }}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 6 }}
+            transition={{ duration: 0.14, ease: 'easeOut' }}
             onSubmit={submit}
             onMouseDown={event => event.stopPropagation()}
           >
@@ -61,7 +71,7 @@ export default function TrackMetadataDialog({ track, onClose, onSave }: {
             </div>
 
             <div className="metadata-dialog__preview">
-              <div>{coverUrl ? <img src={coverUrl} alt="封面预览" /> : <Image size={26} />}</div>
+              <div>{previewCoverUrl ? <img src={previewCoverUrl} alt="封面预览" /> : <Image size={26} />}</div>
               <span><strong>{title || '歌曲名称'}</strong><small>{artist || '歌手'}{album ? ` · ${album}` : ''}</small></span>
             </div>
 

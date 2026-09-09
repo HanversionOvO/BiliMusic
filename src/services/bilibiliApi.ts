@@ -364,11 +364,15 @@ export interface ReplyContent {
 
 export interface ReplyItem {
   rpid: number
+  root?: number
+  parent?: number
+  action?: number
   ctime: number
   like: number
   rcount: number
   member: ReplyMember
   content: ReplyContent
+  replies?: ReplyItem[] | null
 }
 
 export interface ReplyPage {
@@ -397,6 +401,81 @@ export async function getVideoComments(
       sort: 2,
     },
   })
+}
+
+export async function getCommentReplies(
+  oid: number,
+  root: number,
+  page = 1,
+  pageSize = 20,
+): Promise<ReplyResponse> {
+  return biliFetch('/x/v2/reply/reply', {
+    params: { type: 1, oid, root, pn: page, ps: pageSize },
+  })
+}
+
+export async function postCommentReply(
+  oid: number,
+  root: number,
+  parent: number,
+  message: string,
+): Promise<ReplyItem> {
+  const cookies = await window.electronAPI?.biliApi.getCookies?.()
+  if (!cookies?.isLoggedIn || !cookies.biliJct) {
+    throw new Error('请先登录 Bilibili 后再回复')
+  }
+
+  const body = new URLSearchParams({
+    oid: String(oid),
+    type: '1',
+    root: String(root),
+    parent: String(parent),
+    message: message.trim(),
+    plat: '1',
+    csrf: cookies.biliJct,
+  })
+  const response = await fetch(`${BILI_API}/x/v2/reply/add`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+      Referer: 'https://www.bilibili.com',
+    },
+    body,
+  })
+  const data = await response.json()
+  if (data.code !== 0) {
+    throw new BiliApiError(data.code, data.message || '回复失败', '/x/v2/reply/add')
+  }
+  return data.data?.reply || data.data
+}
+
+export async function setCommentLike(oid: number, rpid: number, liked: boolean): Promise<void> {
+  const cookies = await window.electronAPI?.biliApi.getCookies?.()
+  if (!cookies?.isLoggedIn || !cookies.biliJct) {
+    throw new Error('请先登录 Bilibili 后再点赞')
+  }
+
+  const body = new URLSearchParams({
+    oid: String(oid),
+    type: '1',
+    rpid: String(rpid),
+    action: liked ? '1' : '0',
+    csrf: cookies.biliJct,
+  })
+  const response = await fetch(`${BILI_API}/x/v2/reply/action`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+      Referer: 'https://www.bilibili.com',
+    },
+    body,
+  })
+  const data = await response.json()
+  if (data.code !== 0) {
+    throw new BiliApiError(data.code, data.message || '点赞失败', '/x/v2/reply/action')
+  }
 }
 
 // ===== 音频流 =====

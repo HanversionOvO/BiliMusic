@@ -30,8 +30,8 @@ const biliApi = {
   extractAudio: (bvid) =>
     ipcRenderer.invoke('bili:extractAudio', bvid),
 
-  downloadAudio: (audioUrl, filename) =>
-    ipcRenderer.invoke('bili:downloadAudio', audioUrl, filename),
+  downloadAudio: (audioUrl, filename, downloadDir) =>
+    ipcRenderer.invoke('bili:downloadAudio', audioUrl, filename, downloadDir),
 
   // 扫码登录
   qrGenerate: () =>
@@ -67,6 +67,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   minimize: () => ipcRenderer.send('window:minimize'),
   maximize: () => ipcRenderer.send('window:maximize'),
   close: () => ipcRenderer.send('window:close'),
+  selectDownloadDirectory: (currentPath) => ipcRenderer.invoke('dialog:select-download-directory', currentPath),
   isMaximized: () => ipcRenderer.invoke('window:isMaximized'),
   toggleFullscreen: () => ipcRenderer.send('window:toggle-fullscreen'),
   isFullscreen: () => ipcRenderer.invoke('window:isFullscreen'),

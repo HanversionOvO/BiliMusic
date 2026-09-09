@@ -20,7 +20,7 @@ interface BiliApi {
     audioMimeType: string
     bandwidth: number
   }>
-  downloadAudio: (audioUrl: string, filename: string) => Promise<{
+  downloadAudio: (audioUrl: string, filename: string, downloadDir?: string) => Promise<{
     filePath: string
     size: number
   }>
@@ -121,6 +121,7 @@ declare global {
       minimize: () => void
       maximize: () => void
       close: () => void
+      selectDownloadDirectory?: (currentPath?: string) => Promise<string | null>
       isMaximized?: () => Promise<boolean>
       toggleFullscreen?: () => void
       isFullscreen?: () => Promise<boolean>

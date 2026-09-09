@@ -328,6 +328,12 @@ body {
   -webkit-backdrop-filter: blur(18px);
 }
 
+.metadata-dialog-backdrop {
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
 .playlist-dialog {
   width: min(420px, calc(100vw - 40px));
   border-radius: 22px;
@@ -447,6 +453,7 @@ body {
 
 .metadata-dialog {
   width: min(460px, calc(100vw - 40px));
+  will-change: transform, opacity;
 }
 
 .metadata-dialog__preview {
@@ -1847,7 +1854,6 @@ body {
 .now-playing-ui {
   transition:
     opacity 900ms cubic-bezier(0.22, 1, 0.36, 1),
-    filter 1100ms cubic-bezier(0.22, 1, 0.36, 1),
     transform 1100ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
@@ -1871,7 +1877,6 @@ body {
 .now-playing.is-immersive-idle .now-playing-ui {
   opacity: 0;
   pointer-events: none;
-  filter: blur(18px) saturate(0.9);
   transform: translate3d(0, 18px, 0) scale(0.985);
 }
 
@@ -1880,7 +1885,6 @@ body {
 }
 
 .now-playing.is-immersive-idle .now-playing-ui--controls {
-  filter: blur(24px) saturate(0.8);
   transform: translate3d(0, 34px, 0) scale(1.035);
 }
 
@@ -2001,10 +2005,12 @@ body {
 
 .now-playing-bg__cover {
   position: absolute;
-  inset: -18%;
+  inset: -10%;
   background-size: cover;
   background-position: center;
-  filter: blur(92px) saturate(1.85) brightness(0.86);
+  opacity: 0.72;
+  filter: blur(48px) saturate(1.5) brightness(0.82);
+  transform: scale(1.08);
   transform-origin: center;
 }
 
@@ -2029,6 +2035,11 @@ body {
   align-items: center;
   justify-content: space-between;
   padding: 0 22px;
+}
+
+/* macOS 左上角的 traffic lights 需要约 70px 的安全区。 */
+.now-playing.is-macos:not(.is-fullscreen) .now-playing-top {
+  padding-left: 88px;
 }
 
 .now-playing-top__actions {
@@ -2063,6 +2074,19 @@ body {
   grid-template-columns: minmax(320px, 420px) minmax(0, 1fr);
   align-items: center;
   gap: clamp(42px, 7vw, 104px);
+  animation: now-playing-content-enter 180ms ease-out both;
+}
+
+@keyframes now-playing-content-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 8px, 0);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
 }
 
 .now-playing-left {
@@ -2091,6 +2115,12 @@ body {
   background: rgba(255, 55, 95, 0.35);
   filter: blur(44px);
   transform: translateY(18px);
+  opacity: 0.28;
+  transition: opacity 320ms ease;
+}
+
+.now-playing-cover-glow.is-playing {
+  opacity: 0.48;
 }
 
 .now-playing-cover {
@@ -2350,6 +2380,7 @@ body {
   border: 0;
   box-shadow: none;
   overflow: hidden;
+  contain: layout paint style;
 }
 
 .lyrics-panel {
@@ -2390,9 +2421,91 @@ body {
   min-height: 0;
 }
 
+.lyrics-panel__rematch {
+  position: absolute;
+  z-index: 5;
+  top: 4px;
+  right: 8px;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.68);
+  cursor: pointer;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  transition:
+    color var(--duration-fast),
+    background var(--duration-fast),
+    border-color var(--duration-fast),
+    transform var(--duration-fast);
+}
+
+.lyrics-panel__rematch:hover:not(:disabled) {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.22);
+  transform: rotate(-14deg) scale(1.04);
+}
+
+.lyrics-panel__rematch:active:not(:disabled) {
+  transform: scale(0.92);
+}
+
+.lyrics-panel__rematch:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
 .lyrics-scroll {
   scrollbar-width: thin;
   scrollbar-color: transparent transparent;
+  contain: layout paint style;
+}
+
+.lyrics-scroll__content {
+  animation: lyrics-enter 240ms ease-out both;
+}
+
+.lyrics-line {
+  margin: 0;
+  padding: 10px 8px;
+  color: #fff;
+  font-weight: 820;
+  line-height: 1.38;
+  cursor: pointer;
+  opacity: 0.22;
+  transform-origin: left center;
+  transition:
+    opacity 240ms ease,
+    transform 300ms cubic-bezier(0.22, 1, 0.36, 1),
+    text-shadow 240ms ease;
+}
+
+.lyrics-line.is-near {
+  opacity: 0.46;
+  transform: translate3d(4px, 0, 0) scale(1.015);
+}
+
+.lyrics-line.is-active {
+  opacity: 1;
+  transform: translate3d(14px, 0, 0) scale(1.075);
+  text-shadow: 0 8px 34px rgba(0, 0, 0, 0.44), 0 0 26px rgba(255, 255, 255, 0.1);
+}
+
+@keyframes lyrics-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 12px, 0);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
 }
 
 .lyrics-scroll::-webkit-scrollbar {
@@ -2601,14 +2714,15 @@ body {
   border-radius: 30px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.095), rgba(255, 255, 255, 0.035)),
-    rgba(10, 10, 14, 0.68);
+    rgba(10, 10, 14, 0.88);
   border: 1px solid rgba(255, 255, 255, 0.145);
   box-shadow:
     0 34px 92px rgba(0, 0, 0, 0.52),
     0 0 0 1px rgba(255, 255, 255, 0.035),
     inset 0 1px rgba(255, 255, 255, 0.18);
-  backdrop-filter: blur(38px) saturate(1.55);
-  -webkit-backdrop-filter: blur(38px) saturate(1.55);
+  backdrop-filter: blur(10px) saturate(1.15);
+  -webkit-backdrop-filter: blur(10px) saturate(1.15);
+  contain: layout paint style;
 }
 
 .now-playing-comments::before,
@@ -2645,8 +2759,8 @@ body {
   background-image: var(--comment-cover);
   background-size: cover;
   background-position: center;
-  filter: blur(42px) saturate(1.85);
-  opacity: 0.22;
+  filter: blur(22px) saturate(1.4);
+  opacity: 0.18;
   transform: rotate(8deg);
 }
 
@@ -2774,6 +2888,161 @@ body {
     transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
     border-color 180ms ease,
     box-shadow 180ms ease;
+}
+
+.now-playing-comment-thread {
+  position: relative;
+}
+
+.now-playing-comment-thread__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: -5px 10px 5px 62px;
+}
+
+.now-playing-comment-thread__actions button,
+.now-playing-comment__stats button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 0;
+  border: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.5);
+  font: 750 11px/1 var(--font-body);
+  cursor: pointer;
+}
+
+.now-playing-comment-thread__actions button:hover,
+.now-playing-comment__stats button:hover {
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.now-playing-comment__stats button.is-liked {
+  color: #ff6b8e;
+}
+
+.now-playing-comment__stats button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.now-playing-comment__error {
+  display: block;
+  margin-top: 5px;
+  color: #ff91aa;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.now-playing-comment-replies {
+  margin: 5px 8px 8px 58px;
+  padding-left: 8px;
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.now-playing-comment.is-nested {
+  padding: 9px 8px;
+  border-radius: 15px;
+}
+
+.now-playing-comment.is-nested::after {
+  left: 46px;
+}
+
+.now-playing-comment.is-nested img,
+.now-playing-comment.is-nested .now-playing-comment__avatar {
+  width: 32px;
+  height: 32px;
+}
+
+.now-playing-comment-feedback {
+  width: 100%;
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.48);
+  font: 700 12px/1.4 var(--font-body);
+}
+
+button.now-playing-comment-feedback.is-error {
+  color: #ff91aa;
+  cursor: pointer;
+}
+
+.now-playing-comment-composer {
+  margin: 8px 10px 12px 62px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.065);
+}
+
+.now-playing-comment-composer > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.now-playing-comment-composer > div button {
+  border: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+}
+
+.now-playing-comment-composer textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 62px;
+  max-height: 150px;
+  padding: 9px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  outline: 0;
+  background: rgba(0, 0, 0, 0.2);
+  color: #fff;
+  font: 650 12px/1.5 var(--font-body);
+}
+
+.now-playing-comment-composer textarea:focus {
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.now-playing-comment-composer > small {
+  color: #ff91aa;
+  font-size: 11px;
+}
+
+.now-playing-comment-composer > button {
+  align-self: flex-end;
+  min-height: 30px;
+  padding: 0 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  border-radius: 999px;
+  background: #fff;
+  color: #111116;
+  font: 800 11px/1 var(--font-body);
+  cursor: pointer;
+}
+
+.now-playing-comment-composer > button:disabled {
+  cursor: default;
+  opacity: 0.45;
 }
 
 .now-playing-comment::after {

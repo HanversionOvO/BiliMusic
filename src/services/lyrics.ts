@@ -219,11 +219,16 @@ function normIncludes(haystack: string, needle: string): boolean {
   return n.length >= 2 && h.includes(n)
 }
 
-function scoreCandidate(c: LyricCandidate, ctx: { rawTitle: string; clean: string; duration: number; quoted: string[] }): number {
+function scoreCandidate(c: LyricCandidate, ctx: { rawTitle: string; clean: string; artist: string; duration: number; quoted: string[] }): number {
   const quotedScore = Math.max(0, ...ctx.quoted.map(q => dice(c.trackName, q)))
   let score = 0
   score += normIncludes(ctx.rawTitle, c.trackName) ? 360 : dice(c.trackName, ctx.clean) * 180
   score += normIncludes(ctx.rawTitle, c.artistName) ? 280 : 0
+  if (ctx.artist) {
+    score += normIncludes(c.artistName, ctx.artist) || normIncludes(ctx.artist, c.artistName)
+      ? 320
+      : dice(c.artistName, ctx.artist) * 180
+  }
   score += quotedScore * 300
   score += c.albumName && normIncludes(ctx.rawTitle, c.albumName) ? 40 : 0
 
@@ -242,7 +247,11 @@ function scoreCandidate(c: LyricCandidate, ctx: { rawTitle: string; clean: strin
 }
 
 async function searchBestCandidate(track: Track): Promise<LyricCandidate | null> {
-  const queries = queryCandidates(track.title)
+  const titleQueries = queryCandidates(track.title)
+  const editedArtist = track.metadataUpdatedAt ? cleanSeg(track.artist) : ''
+  const queries: string[] = []
+  if (editedArtist) uniqPush(queries, `${cleanTitle(track.title)} ${editedArtist}`)
+  titleQueries.forEach(query => uniqPush(queries, query))
   if (!queries.length) return null
 
   const seen = new Map<string, LyricCandidate>()
@@ -255,6 +264,7 @@ async function searchBestCandidate(track: Track): Promise<LyricCandidate | null>
   const ctx = {
     rawTitle: track.title,
     clean: cleanTitle(track.title),
+    artist: editedArtist,
     duration: track.duration || 0,
     quoted: quotedTitles(track.title),
   }

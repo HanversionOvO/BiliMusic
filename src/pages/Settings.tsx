@@ -133,8 +133,11 @@ export default function Settings() {
     setSyncBusy(false)
   }
 
-  const changeDownloadDir = () => {
-    const next = window.prompt('请输入下载目录', settings.downloadDir)
+  const changeDownloadDir = async () => {
+    const selectDirectory = window.electronAPI?.selectDownloadDirectory
+    const next = selectDirectory
+      ? await selectDirectory(settings.downloadDir)
+      : window.prompt('请输入下载目录', settings.downloadDir)
     if (next?.trim()) setAppSettings({ downloadDir: next.trim() })
   }
 

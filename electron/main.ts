@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Tray, ipcMain, nativeImage, net, protocol, screen, session, shell } from 'electron'
+import { app, BrowserWindow, Tray, dialog, ipcMain, nativeImage, net, protocol, screen, session, shell } from 'electron'
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath, pathToFileURL } from 'url'
@@ -85,6 +85,12 @@ let trayWindow: BrowserWindow | null = null
 let trayWindowReady = false
 let pendingTrayShow: { x: number; y: number } | null = null
 let isQuitting = false
+
+// macOS 的 Command + Q 会先触发 before-quit，再依次关闭窗口。
+// 提前标记退出状态，避免主窗口的“关闭时隐藏到托盘”逻辑拦截系统退出。
+app.on('before-quit', () => {
+  isQuitting = true
+})
 
 type TrayCommand = 'toggle-play' | 'next' | 'prev' | 'show-window' | 'quit'
 
@@ -520,7 +526,6 @@ function sendTrayCommand(command: TrayCommand) {
   if (command === 'quit') {
     isQuitting = true
     trayWindow?.close()
-    mainWindow?.destroy()
     app.quit()
     return
   }
@@ -595,6 +600,18 @@ ipcMain.on('window:maximize', () => {
   }
 })
 ipcMain.on('window:close', hideToTray)
+ipcMain.handle('dialog:select-download-directory', async (_event, currentPath?: string) => {
+  const defaultPath = currentPath && path.isAbsolute(currentPath) ? currentPath : app.getPath('music')
+  const options = {
+    title: '选择音乐下载目录',
+    defaultPath,
+    properties: ['openDirectory', 'createDirectory'] as ('openDirectory' | 'createDirectory')[],
+  }
+  const result = mainWindow
+    ? await dialog.showOpenDialog(mainWindow, options)
+    : await dialog.showOpenDialog(options)
+  return result.canceled ? null : result.filePaths[0] || null
+})
 ipcMain.handle('window:isMaximized', () => Boolean(mainWindow?.isMaximized() || mainWindow?.isFullScreen()))
 ipcMain.on('window:toggle-fullscreen', () => {
   if (!mainWindow) return

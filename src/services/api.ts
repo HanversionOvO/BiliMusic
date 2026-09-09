@@ -6,6 +6,7 @@
  */
 
 import type { TrackSource } from '@/services/bilibiliApi'
+import { loadAppSettings } from '@/utils/storage'
 
 function isElectron(): boolean {
   return !!window.electronAPI?.biliApi
@@ -132,12 +133,36 @@ export async function getVideoDetail(bvid: string): Promise<VideoInfo> {
 
 export interface VideoComment {
   id: number
+  oid: number
+  rootId: number
+  parentId: number
   author: string
   avatar: string
   message: string
   like: number
+  liked: boolean
   replyCount: number
   createdAt: number
+  replies: VideoComment[]
+}
+
+function mapVideoComment(reply: import('@/services/bilibiliApi').ReplyItem, oid: number, fallbackRoot = 0): VideoComment {
+  const id = Number(reply.rpid) || 0
+  const rootId = Number(reply.root) || fallbackRoot || id
+  return {
+    id,
+    oid,
+    rootId,
+    parentId: Number(reply.parent) || rootId,
+    author: reply.member?.uname || 'Bilibili 用户',
+    avatar: normalizePic(reply.member?.avatar || ''),
+    message: reply.content?.message || '',
+    like: reply.like || 0,
+    liked: reply.action === 1,
+    replyCount: reply.rcount || 0,
+    createdAt: reply.ctime || 0,
+    replies: (reply.replies || []).map((child) => mapVideoComment(child, oid, rootId)),
+  }
 }
 
 export async function getVideoComments(
@@ -168,17 +193,26 @@ export async function getVideoComments(
   const data = await rendererComments(oid, page, pageSize)
   const replies = data.replies || []
   return {
-    items: replies.map((reply) => ({
-      id: reply.rpid,
-      author: reply.member?.uname || 'Bilibili 用户',
-      avatar: normalizePic(reply.member?.avatar || ''),
-      message: reply.content?.message || '',
-      like: reply.like || 0,
-      replyCount: reply.rcount || 0,
-      createdAt: reply.ctime || 0,
-    })),
+    items: replies.map((reply) => mapVideoComment(reply, oid)),
     total: data.page?.count || replies.length,
   }
+}
+
+export async function getVideoCommentReplies(comment: VideoComment, page = 1, pageSize = 20): Promise<VideoComment[]> {
+  const { getCommentReplies } = await import('@/services/bilibiliApi')
+  const data = await getCommentReplies(comment.oid, comment.rootId || comment.id, page, pageSize)
+  return (data.replies || []).map((reply) => mapVideoComment(reply, comment.oid, comment.rootId || comment.id))
+}
+
+export async function replyToVideoComment(comment: VideoComment, message: string): Promise<VideoComment> {
+  const { postCommentReply } = await import('@/services/bilibiliApi')
+  const reply = await postCommentReply(comment.oid, comment.rootId || comment.id, comment.id, message)
+  return mapVideoComment(reply, comment.oid, comment.rootId || comment.id)
+}
+
+export async function likeVideoComment(comment: VideoComment, liked: boolean): Promise<void> {
+  const { setCommentLike } = await import('@/services/bilibiliApi')
+  return setCommentLike(comment.oid, comment.id, liked)
 }
 
 // ===== 提取音频 =====
@@ -196,7 +230,7 @@ export async function extractAudio(
 
 export async function downloadAudio(audioUrl: string, filename: string): Promise<{ filePath: string; size: number }> {
   if (isElectron()) {
-    return window.electronAPI.biliApi.downloadAudio(audioUrl, filename)
+    return window.electronAPI.biliApi.downloadAudio(audioUrl, filename, loadAppSettings().downloadDir)
   }
 
   throw new Error('Audio download requires Electron environment')

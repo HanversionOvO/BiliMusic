@@ -50,8 +50,10 @@ export function registerBiliApiHandlers() {
   })
 
   // 下载音频文件到本地
-  ipcMain.handle('bili:downloadAudio', async (_event, audioUrl: string, filename: string) => {
-    const downloadDir = path.join(app.getPath('userData'), 'downloads')
+  ipcMain.handle('bili:downloadAudio', async (_event, audioUrl: string, filename: string, requestedDir?: string) => {
+    const downloadDir = requestedDir && path.isAbsolute(requestedDir)
+      ? requestedDir
+      : path.join(app.getPath('userData'), 'downloads')
     await fs.mkdir(downloadDir, { recursive: true })
     const filePath = path.join(downloadDir, filename)
 

@@ -27,10 +27,11 @@ function formatDuration(seconds: number): string {
   return `${minutes}:${rest.toString().padStart(2, '0')}`
 }
 
-export default function BiliVideoRow({ track, subtitle, durationText }: {
+export default function BiliVideoRow({ track, subtitle, durationText, resolvePartsOnPlay = false }: {
   track: Track
   subtitle: string
   durationText?: string
+  resolvePartsOnPlay?: boolean
 }) {
   const player = usePlayer()
   const { openAddTracksToPlaylist } = useAddToPlaylist()
@@ -45,6 +46,36 @@ export default function BiliVideoRow({ track, subtitle, durationText }: {
   )
   const primaryTrack = detail ? videoInfoToTrack(detail) : track
   const isCurrent = player.currentTrack?.id === primaryTrack.id
+
+  const playResolvedVideo = (data: VideoInfo) => {
+    const resolvedParts = data.pages?.map((page) => videoPageToTrack(data, page)) || []
+    const isMultiPart = (data.pageCount || resolvedParts.length) > 1
+    if (isMultiPart) setExpanded(true)
+    player.playNow(resolvedParts[0] || videoInfoToTrack(data))
+  }
+
+  const playPrimary = async () => {
+    if (!resolvePartsOnPlay) {
+      player.playNow(primaryTrack)
+      return
+    }
+    if (detail) {
+      playResolvedVideo(detail)
+      return
+    }
+
+    setLoading(true)
+    setError('')
+    try {
+      const data = await loadDetail(track.bvid)
+      setDetail(data)
+      playResolvedVideo(data)
+    } catch (e: any) {
+      setError(e?.message || '视频详情加载失败')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const toggleParts = async (event: React.MouseEvent) => {
     event.stopPropagation()
@@ -69,7 +100,7 @@ export default function BiliVideoRow({ track, subtitle, durationText }: {
     <div className={`bili-video-group ${expanded ? 'is-expanded' : ''}`}>
       <motion.div
         className={`apple-search-row video-row ${isCurrent ? 'is-current' : ''}`}
-        onClick={() => player.playNow(primaryTrack)}
+        onClick={playPrimary}
         whileHover={{ y: -1 }}
         whileTap={{ scale: 0.995 }}
         transition={{ duration: 0.18 }}

@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { memo, useCallback, useEffect, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import {
   ChevronDown, Play, Pause, SkipBack, SkipForward, Shuffle, Repeat,
   Heart, Volume2, VolumeX, Search, Music, Loader2, Maximize2, Minimize2, X, MessageCircle, ExternalLink, ThumbsUp, RefreshCw,
+  ChevronRight, CornerUpLeft, Send,
 } from 'lucide-react'
 import { usePlayer, usePlayerProgress } from '@/contexts/PlayerContext'
 import { useNowPlaying } from '@/contexts/NowPlayingContext'
@@ -11,8 +12,8 @@ import { useAppSettings } from '@/hooks/useAppSettings'
 import { useLyrics } from '@/hooks/useLyrics'
 import PlayerSlider from '@/components/PlayerSlider'
 import LyricsView from '@/components/LyricsView'
-import type { LyricCandidate } from '@/services/lyrics'
-import { getVideoComments, type VideoComment } from '@/services/api'
+import type { LyricCandidate, LyricLine } from '@/services/lyrics'
+import { getVideoCommentReplies, getVideoComments, likeVideoComment, replyToVideoComment, type VideoComment } from '@/services/api'
 
 const sliderTheme = {
   ['--track-bg']: 'rgba(255,255,255,0.18)',
@@ -27,12 +28,11 @@ const commentPageSize = 20
 export default function NowPlaying() {
   const navigate = useNavigate()
   const player = usePlayer()
-  const { progress, duration: liveDuration, setProgress } = usePlayerProgress()
   const { expanded, close } = useNowPlaying()
   const { settings } = useAppSettings()
   const track = player.currentTrack
+  const isMac = window.electronAPI?.platform === 'darwin'
   const lyrics = useLyrics(track, expanded && settings.showLyrics)
-  const duration = liveDuration || track?.duration || 0
   const [fullscreen, setFullscreen] = useState(false)
   const [controlsVisible, setControlsVisible] = useState(true)
   const [commentsOpen, setCommentsOpen] = useState(false)
@@ -115,13 +115,17 @@ export default function NowPlaying() {
     }
   }, [track?.aid, track?.bvid])
 
-  const toggleComments = () => {
+  const toggleComments = useCallback(() => {
     const nextOpen = !commentsOpen
     setCommentsOpen(nextOpen)
     if (nextOpen && commentsStatus === 'idle') {
       void loadComments(1)
     }
-  }
+  }, [commentsOpen, commentsStatus, loadComments])
+
+  const closeComments = useCallback(() => setCommentsOpen(false), [])
+  const retryComments = useCallback(() => { void loadComments(1) }, [loadComments])
+  const loadMoreComments = useCallback(() => { void loadComments(commentsPage + 1) }, [commentsPage, loadComments])
 
   useEffect(() => {
     if (!expanded || !fullscreen) {
@@ -160,11 +164,11 @@ export default function NowPlaying() {
       {expanded && track && (
         <motion.div
           key="now-playing"
-          className={`now-playing ${fullscreen ? 'is-fullscreen' : ''} ${fullscreen && !controlsVisible ? 'is-immersive-idle' : ''}`}
-          initial={{ opacity: 0, scale: 1.015 }}
-          animate={{ opacity: 1, scale: 1 }}
-          exit={{ opacity: 0, scale: 0.985 }}
-          transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
+          className={`now-playing ${isMac ? 'is-macos' : ''} ${fullscreen ? 'is-fullscreen' : ''} ${fullscreen && !controlsVisible ? 'is-immersive-idle' : ''}`}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.16, ease: 'linear' }}
         >
           <div className="now-playing-smoke" aria-hidden="true">
             <span />
@@ -174,18 +178,13 @@ export default function NowPlaying() {
           <div className="now-playing-bg">
             {track.coverUrl && (
               <>
-                <motion.div
+                <div
                   className="now-playing-bg__cover"
                   style={{ backgroundImage: `url(${track.coverUrl})` }}
-                  initial={{ opacity: 0, scale: 1.12 }}
-                  animate={{ opacity: 0.72, scale: [1.16, 1.25, 1.18] }}
-                  transition={{ opacity: { duration: 0.8 }, scale: { duration: 22, repeat: Infinity, ease: 'easeInOut' } }}
                 />
-                <motion.div
+                <div
                   className="now-playing-bg__disc"
                   style={{ backgroundImage: `url(${track.coverUrl})` }}
-                  animate={{ rotate: player.isPlaying ? 360 : 0 }}
-                  transition={{ duration: 34, repeat: player.isPlaying ? Infinity : 0, ease: 'linear' }}
                 />
               </>
             )}
@@ -238,40 +237,27 @@ export default function NowPlaying() {
           </header>
 
           <main className="now-playing-main">
-            <motion.section
+            <section
               className="now-playing-left"
-              initial={{ opacity: 0, y: 24 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ ...spring, delay: 0.08 }}
             >
               <div className="now-playing-cover-wrap">
-                <motion.div
-                  className="now-playing-cover-glow"
-                  animate={{ opacity: player.isPlaying ? [0.35, 0.72, 0.4] : 0.26 }}
-                  transition={{ duration: 3.8, repeat: Infinity, ease: 'easeInOut' }}
-                />
-                <motion.img
-                  layoutId="np-cover"
+                <div className={`now-playing-cover-glow ${player.isPlaying ? 'is-playing' : ''}`} />
+                <img
                   className="now-playing-cover"
                   src={track.coverUrl}
                   alt={track.title}
                   loading="eager"
                   decoding="sync"
                   draggable={false}
-                  initial={false}
-                  animate={{ opacity: 1, scale: 1, rotateX: 0 }}
-                  transition={spring}
                 />
               </div>
 
               <div className="now-playing-meta">
                 <div className="now-playing-title-block">
-                  <motion.h1 layoutId="np-title" transition={spring}>{track.title}</motion.h1>
+                  <h1>{track.title}</h1>
                   <motion.button
                     type="button"
                     className="now-playing-artist-link"
-                    layoutId="np-artist"
-                    transition={spring}
                     onClick={openArtistSpace}
                     title={`查看 ${track.artist} 的个人空间`}
                   >
@@ -291,19 +277,7 @@ export default function NowPlaying() {
               </div>
 
               <div className="now-playing-progress now-playing-ui" style={sliderTheme}>
-                <PlayerSlider
-                  ariaLabel="播放进度"
-                  value={progress}
-                  max={duration}
-                  onChange={setProgress}
-                  disabled={duration <= 0}
-                  formatValue={formatTime}
-                  variant="progress"
-                />
-                <div className="now-playing-time">
-                  <span>{formatTime(progress)}</span>
-                  <span>-{formatTime(Math.max(duration - progress, 0))}</span>
-                </div>
+                <NowPlayingProgress fallbackDuration={track.duration || 0} />
               </div>
 
               <div className="now-playing-controls now-playing-ui now-playing-ui--controls">
@@ -369,16 +343,11 @@ export default function NowPlaying() {
                   </RoundIcon>
                 </div>
               </div>
-            </motion.section>
+            </section>
 
-            <motion.section
-              className="now-playing-lyrics-card"
-              initial={{ opacity: 0, x: 34 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ ...spring, delay: 0.16 }}
-            >
+            <section className="now-playing-lyrics-card">
               {settings.showLyrics ? (
-                <LyricsPanel lyrics={lyrics} track={track} onSeek={setProgress} currentTime={progress} />
+                <LyricsPanel lyrics={lyrics} track={track} />
               ) : (
                 <Centered>
                   <Music size={42} strokeWidth={1.25} />
@@ -386,7 +355,7 @@ export default function NowPlaying() {
                   <span>可以在设置中重新开启歌词显示</span>
                 </Centered>
               )}
-            </motion.section>
+            </section>
           </main>
 
           <AnimatePresence>
@@ -399,9 +368,9 @@ export default function NowPlaying() {
                 coverUrl={track.coverUrl}
                 hasMore={comments.length > 0 && comments.length < commentsTotal}
                 loadingMore={commentsLoadingMore}
-                onClose={() => setCommentsOpen(false)}
-                onRetry={() => loadComments(1)}
-                onLoadMore={() => loadComments(commentsPage + 1)}
+                onClose={closeComments}
+                onRetry={retryComments}
+                onLoadMore={loadMoreComments}
               />
             )}
           </AnimatePresence>
@@ -411,7 +380,7 @@ export default function NowPlaying() {
   )
 }
 
-function CommentsPanel({
+const CommentsPanel = memo(function CommentsPanel({
   comments,
   status,
   error,
@@ -438,10 +407,10 @@ function CommentsPanel({
     <motion.aside
       className="now-playing-comments"
       style={{ '--comment-cover': coverUrl ? `url(${coverUrl})` : 'none' } as React.CSSProperties}
-      initial={{ opacity: 0, x: 42, scale: 0.985 }}
-      animate={{ opacity: 1, x: 0, scale: 1 }}
-      exit={{ opacity: 0, x: 42, scale: 0.985 }}
-      transition={spring}
+      initial={{ opacity: 0, x: 32 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: 32 }}
+      transition={{ duration: 0.18, ease: 'easeOut' }}
     >
       <div className="now-playing-comments__aura" aria-hidden="true" />
       <div className="now-playing-comments__head">
@@ -481,24 +450,7 @@ function CommentsPanel({
 
         {status === 'ready' && comments.length > 0 && (
           <div className="now-playing-comments__list">
-            {comments.map((comment) => (
-              <article key={comment.id} className="now-playing-comment">
-                {comment.avatar
-                  ? <img src={comment.avatar} alt="" />
-                  : <div className="now-playing-comment__avatar">{comment.author.slice(0, 1).toUpperCase()}</div>}
-                <div className="now-playing-comment__content">
-                  <div className="now-playing-comment__meta">
-                    <strong>{comment.author}</strong>
-                    <span>{formatCommentTime(comment.createdAt)}</span>
-                  </div>
-                  <p>{comment.message}</p>
-                  <div className="now-playing-comment__stats">
-                    <span><ThumbsUp size={13} />{formatCount(comment.like)}</span>
-                    {comment.replyCount > 0 && <span>{formatCount(comment.replyCount)} 条回复</span>}
-                  </div>
-                </div>
-              </article>
-            ))}
+            {comments.map((comment) => <CommentThread key={comment.id} comment={comment} />)}
 
             {hasMore && (
               <button type="button" className="now-playing-comments__more" onClick={onLoadMore} disabled={loadingMore}>
@@ -511,15 +463,170 @@ function CommentsPanel({
       </div>
     </motion.aside>
   )
+})
+
+function CommentThread({ comment }: { comment: VideoComment }) {
+  const [expanded, setExpanded] = useState(false)
+  const [replies, setReplies] = useState(comment.replies)
+  const [loaded, setLoaded] = useState(comment.replies.length >= comment.replyCount)
+  const [loading, setLoading] = useState(false)
+  const [loadError, setLoadError] = useState('')
+  const [replyingTo, setReplyingTo] = useState<VideoComment | null>(null)
+  const [message, setMessage] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState('')
+
+  const loadReplies = async () => {
+    if (loaded || loading) return
+    setLoading(true)
+    setLoadError('')
+    try {
+      setReplies(await getVideoCommentReplies(comment))
+      setLoaded(true)
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : '回复加载失败')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const toggleReplies = () => {
+    if (expanded) {
+      setExpanded(false)
+      return
+    }
+    setExpanded(true)
+    void loadReplies()
+  }
+
+  const beginReply = (target: VideoComment) => {
+    setReplyingTo(target)
+    setMessage('')
+    setSubmitError('')
+  }
+
+  const submitReply = async () => {
+    const content = message.trim()
+    if (!replyingTo || !content || submitting) return
+    setSubmitting(true)
+    setSubmitError('')
+    try {
+      const created = await replyToVideoComment(replyingTo, content)
+      setReplies((current) => [...current, created])
+      setExpanded(true)
+      setLoaded(true)
+      setReplyingTo(null)
+      setMessage('')
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : '回复发送失败')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div className="now-playing-comment-thread">
+      <CommentCard comment={comment} onReply={beginReply} />
+      <div className="now-playing-comment-thread__actions">
+        {comment.replyCount > 0 && (
+          <button type="button" onClick={toggleReplies} aria-expanded={expanded}>
+            {loading ? <Loader2 size={13} className="spin" /> : expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+            {expanded ? '收起回复' : `查看 ${formatCount(comment.replyCount)} 条回复`}
+          </button>
+        )}
+        <button type="button" onClick={() => beginReply(comment)}><CornerUpLeft size={13} />回复</button>
+      </div>
+
+      {expanded && (
+        <div className="now-playing-comment-replies">
+          {replies.map((reply) => <CommentCard key={reply.id} comment={reply} nested onReply={beginReply} />)}
+          {loading && <div className="now-playing-comment-feedback"><Loader2 size={14} className="spin" />正在加载回复...</div>}
+          {loadError && <button type="button" className="now-playing-comment-feedback is-error" onClick={loadReplies}>{loadError}，点击重试</button>}
+        </div>
+      )}
+
+      {replyingTo && (
+        <div className="now-playing-comment-composer">
+          <div><span>回复 @{replyingTo.author}</span><button type="button" onClick={() => setReplyingTo(null)}>取消</button></div>
+          <textarea
+            value={message}
+            onChange={(event) => setMessage(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) void submitReply()
+            }}
+            placeholder="写下你的回复…"
+            rows={3}
+            autoFocus
+          />
+          {submitError && <small>{submitError}</small>}
+          <button type="button" onClick={submitReply} disabled={!message.trim() || submitting}>
+            {submitting ? <Loader2 size={14} className="spin" /> : <Send size={14} />}
+            {submitting ? '发送中' : '发送回复'}
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function CommentCard({ comment, nested = false, onReply }: { comment: VideoComment; nested?: boolean; onReply: (comment: VideoComment) => void }) {
+  const [liked, setLiked] = useState(comment.liked)
+  const [likeCount, setLikeCount] = useState(comment.like)
+  const [liking, setLiking] = useState(false)
+  const [likeError, setLikeError] = useState('')
+
+  const toggleLike = async () => {
+    if (liking) return
+    const nextLiked = !liked
+    setLiked(nextLiked)
+    setLikeCount((count) => Math.max(0, count + (nextLiked ? 1 : -1)))
+    setLiking(true)
+    setLikeError('')
+    try {
+      await likeVideoComment(comment, nextLiked)
+    } catch (error) {
+      setLiked(!nextLiked)
+      setLikeCount((count) => Math.max(0, count + (nextLiked ? -1 : 1)))
+      setLikeError(error instanceof Error ? error.message : '点赞失败')
+    } finally {
+      setLiking(false)
+    }
+  }
+
+  return (
+    <article className={`now-playing-comment ${nested ? 'is-nested' : ''}`}>
+      {comment.avatar
+        ? <img src={comment.avatar} alt="" />
+        : <div className="now-playing-comment__avatar">{comment.author.slice(0, 1).toUpperCase()}</div>}
+      <div className="now-playing-comment__content">
+        <div className="now-playing-comment__meta">
+          <strong>{comment.author}</strong>
+          <span>{formatCommentTime(comment.createdAt)}</span>
+        </div>
+        <p>{comment.message}</p>
+        <div className="now-playing-comment__stats">
+          <button
+            type="button"
+            className={liked ? 'is-liked' : ''}
+            onClick={toggleLike}
+            disabled={liking}
+            title={likeError || (liked ? '取消点赞' : '点赞')}
+          >
+            <ThumbsUp size={13} fill={liked ? 'currentColor' : 'none'} />{formatCount(likeCount)}
+          </button>
+          {nested && <button type="button" onClick={() => onReply(comment)}><CornerUpLeft size={12} />回复</button>}
+        </div>
+        {likeError && <small className="now-playing-comment__error">{likeError}</small>}
+      </div>
+    </article>
+  )
 }
 
 function LyricsPanel({
-  lyrics, track, onSeek, currentTime,
+  lyrics, track,
 }: {
   lyrics: ReturnType<typeof useLyrics>
   track: { title: string; artist: string }
-  onSeek: (t: number) => void
-  currentTime: number
 }) {
   const { status, result, search, choose, retry } = lyrics
   const [searchOpen, setSearchOpen] = useState(false)
@@ -551,6 +658,16 @@ function LyricsPanel({
 
   return (
     <div className="lyrics-panel">
+      <button
+        type="button"
+        className="lyrics-panel__rematch"
+        onClick={retry}
+        disabled={status === 'loading'}
+        title="使用当前歌曲信息重新匹配歌词"
+        aria-label="重新匹配歌词"
+      >
+        <RefreshCw size={16} className={status === 'loading' ? 'spin' : undefined} />
+      </button>
       <div className="lyrics-panel__body">
         {status === 'loading' && (
           <Centered>
@@ -569,7 +686,7 @@ function LyricsPanel({
         {(status === 'ok' || status === 'unsynced') && result && (
           <>
             {status === 'unsynced' && <div className="lyrics-panel__hint">该版本无逐行时间轴，按普通歌词显示</div>}
-            <LyricsView lines={result.lines} currentTime={currentTime} synced={result.synced} onSeek={onSeek} />
+            <LyricsTimeline lines={result.lines} synced={result.synced} />
           </>
         )}
       </div>
@@ -620,6 +737,34 @@ function LyricsPanel({
       </AnimatePresence>
     </div>
   )
+}
+
+function NowPlayingProgress({ fallbackDuration }: { fallbackDuration: number }) {
+  const { progress, duration: liveDuration, setProgress } = usePlayerProgress()
+  const duration = liveDuration || fallbackDuration
+
+  return (
+    <>
+      <PlayerSlider
+        ariaLabel="播放进度"
+        value={progress}
+        max={duration}
+        onChange={setProgress}
+        disabled={duration <= 0}
+        formatValue={formatTime}
+        variant="progress"
+      />
+      <div className="now-playing-time">
+        <span>{formatTime(progress)}</span>
+        <span>-{formatTime(Math.max(duration - progress, 0))}</span>
+      </div>
+    </>
+  )
+}
+
+function LyricsTimeline({ lines, synced }: { lines: LyricLine[]; synced: boolean }) {
+  const { progress, setProgress } = usePlayerProgress()
+  return <LyricsView lines={lines} currentTime={progress} synced={synced} onSeek={setProgress} />
 }
 
 function RoundIcon({ children, active, onClick, title }: { children: ReactNode; active?: boolean; onClick: () => void; title: string }) {

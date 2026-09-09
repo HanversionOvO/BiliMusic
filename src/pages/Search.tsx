@@ -433,6 +433,7 @@ export default function SearchPage() {
                     track={searchItemToTrack(result)}
                     subtitle={`${result.author} · ${formatCount(result.play)}播放`}
                     durationText={result.duration}
+                    resolvePartsOnPlay
                   />
                 ))}
               </motion.div>
@@ -648,6 +649,7 @@ function UserSpaceView({ user, onBack }: { user: SelectedUser; onBack: () => voi
                 track={toTrack(video)}
                 subtitle={`${formatCount(video.play)}播放`}
                 durationText={formatDuration(video.duration)}
+                resolvePartsOnPlay
               />
             ))}
           </motion.div>

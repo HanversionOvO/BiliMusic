@@ -451,11 +451,27 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const playNow = useCallback((track: Track) => {
     shouldAutoplayRef.current = true
     setQueue(prev => [track, ...prev.filter(t => t.id !== track.id)])
+
+    // setCurrentTrack with the same track id does not retrigger the audio-loading
+    // effect. Drive the existing audio element directly so a restored/paused
+    // current track starts on the first click instead of only changing the UI.
+    if (currentTrack?.id === track.id && audioRef.current?.src) {
+      const audio = audioRef.current
+      audio.currentTime = 0
+      setCurrentTrack(track)
+      setProgress(0)
+      currentIndexRef.current = 0
+      audio.play()
+        .then(() => setIsPlaying(true))
+        .catch(() => setIsPlaying(false))
+      return
+    }
+
     setCurrentTrack(track)
     setProgress(0)
     currentIndexRef.current = 0
     setIsPlaying(true)
-  }, [])
+  }, [currentTrack?.id])
 
   // 下一首播放：把曲目插入到当前曲目之后（不在队列则新增；无播放则等同立即播放）
   const playNext = useCallback((track: Track) => {

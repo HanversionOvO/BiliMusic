@@ -1,5 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { motion } from 'framer-motion'
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import type { LyricLine } from '@/services/lyrics'
 
 interface LyricsViewProps {
@@ -26,7 +25,7 @@ function activeIndexFor(lines: LyricLine[], t: number): number {
   return res
 }
 
-export default function LyricsView({ lines, currentTime, synced, onSeek }: LyricsViewProps) {
+function LyricsView({ lines, currentTime, synced, onSeek }: LyricsViewProps) {
   const viewportRef = useRef<HTMLDivElement>(null)
   const lineRefs = useRef<(HTMLDivElement | null)[]>([])
   const userScrollingRef = useRef(false)
@@ -36,27 +35,35 @@ export default function LyricsView({ lines, currentTime, synced, onSeek }: Lyric
   const active = synced ? activeIndexFor(lines, currentTime) : -1
   const posIndex = Math.max(active, 0)
 
-  const scrollActiveLineIntoView = () => {
+  const scrollActiveLineIntoView = useCallback(() => {
     const vp = viewportRef.current
     const el = lineRefs.current[posIndex]
     if (!vp || !el) return
     const nextTop = el.offsetTop + el.offsetHeight / 2 - vp.clientHeight / 2
     vp.scrollTo({ top: Math.max(0, nextTop), behavior: 'smooth' })
-  }
+  }, [posIndex])
 
-  // 当前行变化 → 自动滚动到视口中间；用户手动滚动时短暂让出控制权。
-  useLayoutEffect(() => {
+  // 在浏览器完成布局后再测量和滚动，避免在提交阶段同步触发布局计算。
+  useEffect(() => {
     if (!synced) return
     if (userScrollingRef.current) return
-    scrollActiveLineIntoView()
-  }, [posIndex, lines, synced])
+    const frame = requestAnimationFrame(scrollActiveLineIntoView)
+    return () => cancelAnimationFrame(frame)
+  }, [scrollActiveLineIntoView, lines, synced])
 
   useEffect(() => {
     if (!synced) return
-    const recompute = () => scrollActiveLineIntoView()
+    let frame = 0
+    const recompute = () => {
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(scrollActiveLineIntoView)
+    }
     window.addEventListener('resize', recompute)
-    return () => window.removeEventListener('resize', recompute)
-  }, [posIndex, synced])
+    return () => {
+      cancelAnimationFrame(frame)
+      window.removeEventListener('resize', recompute)
+    }
+  }, [scrollActiveLineIntoView, synced])
 
   useEffect(() => {
     return () => {
@@ -74,28 +81,16 @@ export default function LyricsView({ lines, currentTime, synced, onSeek }: Lyric
     }, 2600)
   }
 
-  const fade = 'linear-gradient(to bottom, transparent 0%, #000 13%, #000 84%, transparent 100%)'
-
   // 无时间戳：静态可滚动列表
   if (!synced) {
     return (
       <div
         className={`lyrics-scroll ${showScrollbar ? 'is-scrolling' : ''}`}
-        style={{
-          height: '100%',
-          overflowY: 'auto',
-          overflowX: 'hidden',
-          maskImage: fade,
-          WebkitMaskImage: fade,
-          padding: '12% 4px',
-        }}
+        style={{ height: '100%', overflowY: 'auto', overflowX: 'hidden', padding: '12% 4px' }}
       >
         {lines.map((l, i) => (
-          <motion.p
+          <p
             key={i}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.32, delay: Math.min(i * 0.018, 0.22) }}
             style={{
               fontSize: 'clamp(1.2rem, 1.6vw, 1.7rem)',
               fontWeight: 720,
@@ -105,7 +100,7 @@ export default function LyricsView({ lines, currentTime, synced, onSeek }: Lyric
             }}
           >
             {l.text}
-          </motion.p>
+          </p>
         ))}
       </div>
     )
@@ -124,54 +119,36 @@ export default function LyricsView({ lines, currentTime, synced, onSeek }: Lyric
         overflowY: 'auto',
         overflowX: 'hidden',
         overscrollBehavior: 'contain',
-        maskImage: fade,
-        WebkitMaskImage: fade,
       }}
     >
-      <motion.div
-        initial={{ opacity: 0, y: 18 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.36, ease: [0.22, 1, 0.36, 1] }}
-        style={{ padding: '36% 0' }}
-      >
+      <div className="lyrics-scroll__content" style={{ padding: '36% 0' }}>
         {lines.map((l, i) => {
           const isActive = i === active
           const dist = Math.abs(i - posIndex)
           const isNear = dist === 1
+          const stateClass = isActive ? 'is-active' : isNear ? 'is-near' : 'is-distant'
           return (
-            <motion.div
+            <div
               key={i}
               ref={(el) => { lineRefs.current[i] = el }}
               onClick={() => onSeek(l.time)}
-              animate={{
-                opacity: isActive ? 1 : isNear ? 0.46 : 0.22,
-                scale: isActive ? 1.075 : isNear ? 1.015 : 0.985,
-                x: isActive ? 14 : isNear ? 4 : 0,
-                filter: isActive ? 'blur(0px)' : isNear ? 'blur(0.5px)' : 'blur(1.5px)',
-              }}
-              transition={{
-                type: 'spring',
-                stiffness: 150,
-                damping: 24,
-                delay: Math.min(dist * 0.025, 0.18),
-              }}
+              className={`lyrics-line ${stateClass}`}
               style={{
-                transformOrigin: 'left center',
-                cursor: 'pointer',
-                color: '#fff',
                 fontSize: 'clamp(1.46rem, 2.4vw, 2.42rem)',
-                fontWeight: 820,
-                lineHeight: 1.38,
-                padding: '10px 8px',
-                margin: 0,
-                textShadow: isActive ? '0 8px 34px rgba(0,0,0,0.44), 0 0 26px rgba(255,255,255,0.1)' : 'none',
               }}
             >
               {l.text}
-            </motion.div>
+            </div>
           )
         })}
-      </motion.div>
+      </div>
     </div>
   )
 }
+
+// 播放进度会高频更新；只有跨到下一句歌词时才需要重绘歌词树。
+export default memo(LyricsView, (prev, next) => {
+  if (prev.lines !== next.lines || prev.synced !== next.synced || prev.onSeek !== next.onSeek) return false
+  if (!next.synced) return true
+  return activeIndexFor(prev.lines, prev.currentTime) === activeIndexFor(next.lines, next.currentTime)
+})
