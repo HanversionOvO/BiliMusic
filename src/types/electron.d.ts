@@ -68,6 +68,23 @@ interface LyricsApi {
   get: (id: string | number, format?: 'lrc' | 'qrc' | 'ksc') => Promise<OiapiLyricData | null>
 }
 
+interface MetadataCandidate {
+  source: 'itunes'
+  sourceId: string
+  title: string
+  artist: string
+  album: string
+  coverUrl: string
+  duration: number
+  releaseDate: string
+  genre: string
+  score: number
+}
+
+interface MetadataApi {
+  search: (title: string, artist: string, duration?: number) => Promise<MetadataCandidate[]>
+}
+
 interface PersistentStorageApi {
   getItem: (key: string) => string | null
   setItem: (key: string, value: string) => void
@@ -149,6 +166,7 @@ declare global {
       persistentStorage?: PersistentStorageApi
       biliApi: BiliApi
       lyricsApi: LyricsApi
+      metadataApi?: MetadataApi
     }
   }
 }

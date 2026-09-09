@@ -57,6 +57,11 @@ const lyricsApi = {
     ipcRenderer.invoke('lyrics:get', id, format),
 }
 
+const metadataApi = {
+  search: (title, artist, duration) =>
+    ipcRenderer.invoke('metadata:search', title, artist, duration),
+}
+
 const persistentStorage = {
   getItem: (key) => ipcRenderer.sendSync('persistent-storage:get', key),
   setItem: (key, value) => ipcRenderer.send('persistent-storage:set', key, value),
@@ -109,4 +114,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
   persistentStorage,
   biliApi,
   lyricsApi,
+  metadataApi,
 })

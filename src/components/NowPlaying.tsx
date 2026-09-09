@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   ChevronDown, Play, Pause, SkipBack, SkipForward, Shuffle, Repeat,
   Heart, Volume2, VolumeX, Search, Music, Loader2, Maximize2, Minimize2, X, MessageCircle, ExternalLink, ThumbsUp, RefreshCw,
-  ChevronRight, CornerUpLeft, Send,
+  ChevronRight, CornerUpLeft, Send, ChevronsUp, ChevronsDown, TimerReset,
 } from 'lucide-react'
 import { usePlayer, usePlayerProgress } from '@/contexts/PlayerContext'
 import { useNowPlaying } from '@/contexts/NowPlayingContext'
@@ -15,6 +15,8 @@ import LyricsView from '@/components/LyricsView'
 import type { LyricCandidate, LyricLine } from '@/services/lyrics'
 import { getVideoCommentReplies, getVideoComments, likeVideoComment, replyToVideoComment, type VideoComment } from '@/services/api'
 import { trackArtistLabel } from '@/utils/trackMetadata'
+import { getLyricBias, setLyricBias } from '@/utils/lyricBias'
+import type { Track } from '@/types'
 
 const sliderTheme = {
   ['--track-bg']: 'rgba(255,255,255,0.18)',
@@ -22,7 +24,6 @@ const sliderTheme = {
   ['--track-thumb']: '#ffffff',
 } as React.CSSProperties
 
-const spring = { type: 'spring', stiffness: 360, damping: 32, mass: 0.75 } as const
 const noDrag = { WebkitAppRegion: 'no-drag' } as React.CSSProperties
 const commentPageSize = 20
 
@@ -637,7 +638,7 @@ function LyricsPanel({
   lyrics, track,
 }: {
   lyrics: ReturnType<typeof useLyrics>
-  track: { title: string; artist: string }
+  track: Track
 }) {
   const { status, result, search, choose, retry } = lyrics
   const [searchOpen, setSearchOpen] = useState(false)
@@ -645,19 +646,41 @@ function LyricsPanel({
   const [results, setResults] = useState<LyricCandidate[]>([])
   const [searching, setSearching] = useState(false)
   const [choosingId, setChoosingId] = useState<string | null>(null)
+  const [bias, setBias] = useState(() => getLyricBias(track))
+
+  useEffect(() => {
+    setBias(getLyricBias(track))
+  }, [track.id])
+
+  const adjustBias = (delta: number) => {
+    setBias(current => setLyricBias(track, current + delta))
+  }
+
+  const resetBias = () => {
+    setBias(setLyricBias(track, 0))
+  }
+
+  const runSearch = async (keyword: string) => {
+    const normalized = keyword.trim()
+    if (!normalized) return
+    setSearching(true)
+    try {
+      setResults(await search(normalized))
+    } finally {
+      setSearching(false)
+    }
+  }
 
   const openSearch = () => {
-    setQuery(`${track.title} ${track.artist}`.trim())
+    const defaultQuery = `${track.title} ${track.artist}`.trim()
+    setQuery(defaultQuery)
     setResults([])
     setSearchOpen(true)
+    void runSearch(defaultQuery)
   }
 
   const doSearch = async () => {
-    if (!query.trim()) return
-    setSearching(true)
-    const r = await search(query)
-    setResults(r)
-    setSearching(false)
+    await runSearch(query)
   }
 
   const pick = async (record: LyricCandidate) => {
@@ -669,17 +692,51 @@ function LyricsPanel({
 
   return (
     <div className="lyrics-panel">
-      <button
-        type="button"
-        className="lyrics-panel__rematch"
-        onClick={retry}
-        disabled={status === 'loading'}
-        title="使用当前歌曲信息重新匹配歌词"
-        aria-label="重新匹配歌词"
-      >
-        <RefreshCw size={16} className={status === 'loading' ? 'spin' : undefined} />
-      </button>
-      <div className="lyrics-panel__body">
+      <div className="lyrics-panel__tools">
+        <button
+          type="button"
+          className="lyrics-panel__tool lyrics-panel__rematch"
+          onClick={openSearch}
+          disabled={status === 'loading'}
+          title="重新匹配或手动选择歌词"
+          aria-label="重新匹配或手动选择歌词"
+        >
+          <RefreshCw size={16} className={status === 'loading' ? 'spin' : undefined} />
+        </button>
+        <span className="lyrics-panel__tools-divider" />
+        <button
+          type="button"
+          className="lyrics-panel__tool"
+          onClick={() => adjustBias(0.5)}
+          disabled={!result?.synced || bias >= 10}
+          title="歌词提前 0.5 秒"
+          aria-label="歌词提前 0.5 秒"
+        >
+          <ChevronsUp size={16} />
+        </button>
+        <button
+          type="button"
+          className={`lyrics-panel__bias ${bias !== 0 ? 'is-active' : ''}`}
+          onClick={resetBias}
+          disabled={!result?.synced || bias === 0}
+          title={bias === 0 ? '歌词偏移：0 秒' : '点击还原歌词时间'}
+          aria-label={bias === 0 ? '歌词偏移 0 秒' : `歌词偏移 ${bias > 0 ? '提前' : '延后'} ${Math.abs(bias).toFixed(1)} 秒，点击还原`}
+        >
+          <TimerReset size={13} />
+          <span>{bias > 0 ? '+' : ''}{bias.toFixed(1)}s</span>
+        </button>
+        <button
+          type="button"
+          className="lyrics-panel__tool"
+          onClick={() => adjustBias(-0.5)}
+          disabled={!result?.synced || bias <= -10}
+          title="歌词延后 0.5 秒"
+          aria-label="歌词延后 0.5 秒"
+        >
+          <ChevronsDown size={16} />
+        </button>
+      </div>
+      <div className={`lyrics-panel__body ${searchOpen ? 'is-obscured' : ''}`}>
         {status === 'loading' && (
           <Centered>
             <Loader2 size={28} className="spin" />
@@ -697,7 +754,7 @@ function LyricsPanel({
         {(status === 'ok' || status === 'unsynced') && result && (
           <>
             {status === 'unsynced' && <div className="lyrics-panel__hint">该版本无逐行时间轴，按普通歌词显示</div>}
-            <LyricsTimeline lines={result.lines} synced={result.synced} />
+            <LyricsTimeline lines={result.lines} synced={result.synced} bias={bias} />
           </>
         )}
       </div>
@@ -706,10 +763,10 @@ function LyricsPanel({
         {searchOpen && (
           <motion.div
             className="lyrics-drawer"
-            initial={{ opacity: 0, y: 18, scale: 0.985 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 18, scale: 0.985 }}
-            transition={spring}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 4 }}
+            transition={{ duration: 0.12, ease: 'easeOut' }}
           >
             <div className="lyrics-drawer__head">
               <span>手动匹配歌词</span>
@@ -736,7 +793,9 @@ function LyricsPanel({
                     <strong>{r.trackName}</strong>
                     <small>{r.artistName} · {r.albumName || 'QQ Music'} · {formatTime(r.duration)}</small>
                   </span>
-                  {choosingId === r.id ? <Loader2 size={16} className="spin" /> : <span>选择</span>}
+                  {choosingId === r.id
+                    ? <Loader2 size={16} className="spin" />
+                    : <span>{result?.sourceId === r.id ? '当前' : '选择'}</span>}
                 </button>
               ))}
             </div>
@@ -773,9 +832,12 @@ function NowPlayingProgress({ fallbackDuration }: { fallbackDuration: number }) 
   )
 }
 
-function LyricsTimeline({ lines, synced }: { lines: LyricLine[]; synced: boolean }) {
+function LyricsTimeline({ lines, synced, bias }: { lines: LyricLine[]; synced: boolean; bias: number }) {
   const { progress, setProgress } = usePlayerProgress()
-  return <LyricsView lines={lines} currentTime={progress} synced={synced} onSeek={setProgress} />
+  const seekToLyric = useCallback((lyricTime: number) => {
+    setProgress(Math.max(0, lyricTime - bias))
+  }, [bias, setProgress])
+  return <LyricsView lines={lines} currentTime={progress + bias} synced={synced} onSeek={seekToLyric} />
 }
 
 function RoundIcon({ children, active, onClick, title }: { children: ReactNode; active?: boolean; onClick: () => void; title: string }) {

@@ -4,6 +4,7 @@ import path from 'path'
 import { fileURLToPath, pathToFileURL } from 'url'
 import { registerBiliApiHandlers } from './biliApi'
 import { registerLyricsApiHandlers } from './lyricsApi'
+import { registerMetadataApiHandlers } from './metadataApi'
 import { initUpdates, getActiveRendererRoot } from './updater'
 import { registerWebdavHandlers } from './webdav'
 
@@ -688,6 +689,7 @@ app.whenReady().then(() => {
   setupBiliHeaders()
   registerBiliApiHandlers()
   registerLyricsApiHandlers()
+  registerMetadataApiHandlers()
   registerWebdavHandlers()
   // 更新模块须在创建窗口前初始化：bootReconcile 先定下生效的渲染层根目录，供 app:// 加载
   initUpdates({

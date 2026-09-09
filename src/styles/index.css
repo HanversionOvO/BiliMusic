@@ -458,6 +458,8 @@ body {
 
 .metadata-dialog {
   width: min(460px, calc(100vw - 40px));
+  max-height: min(90vh, 760px);
+  overflow-y: auto;
   will-change: transform, opacity;
 }
 
@@ -519,6 +521,119 @@ body {
   gap: 6px;
   color: var(--color-muted-foreground);
   font-size: 11px;
+}
+
+.metadata-autofill-button {
+  width: 100%;
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  margin: 0 0 13px;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 34%, var(--glass-border));
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--color-primary) 10%, var(--glass-bg));
+  color: var(--color-primary);
+  cursor: pointer;
+  font: 760 13px/1 var(--font-body);
+}
+
+.metadata-autofill-button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-primary) 16%, var(--glass-bg));
+}
+
+.metadata-autofill-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.metadata-autofill-error {
+  margin: -4px 2px 12px;
+  color: var(--color-destructive);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.metadata-candidates {
+  max-height: 194px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: -2px 0 13px;
+  padding-right: 2px;
+  contain: layout paint style;
+}
+
+.metadata-candidates > button {
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 9px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--color-border) 38%, transparent);
+  color: var(--color-foreground);
+  cursor: pointer;
+  text-align: left;
+}
+
+.metadata-candidates > button:hover,
+.metadata-candidates > button.is-selected {
+  border-color: color-mix(in srgb, var(--color-primary) 42%, transparent);
+  background: color-mix(in srgb, var(--color-primary) 9%, var(--color-border));
+}
+
+.metadata-candidate__cover {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 9px;
+  background: var(--color-border);
+  color: var(--color-muted);
+}
+
+.metadata-candidate__cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.metadata-candidate__info {
+  min-width: 0;
+  flex: 1;
+}
+
+.metadata-candidate__info strong,
+.metadata-candidate__info small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.metadata-candidate__info strong {
+  font-size: 13px;
+}
+
+.metadata-candidate__info small {
+  margin-top: 4px;
+  color: var(--color-muted-foreground);
+  font-size: 11px;
+}
+
+.metadata-candidate__score {
+  min-width: 30px;
+  display: grid;
+  place-items: center;
+  color: var(--color-primary);
+  font-size: 11px;
+  font-weight: 800;
 }
 
 /* ===== Glass Utilities ===== */
@@ -2529,43 +2644,98 @@ body {
   min-height: 0;
 }
 
-.lyrics-panel__rematch {
+.lyrics-panel__body.is-obscured {
+  visibility: hidden;
+}
+
+.lyrics-panel__tools {
   position: absolute;
   z-index: 5;
-  top: 4px;
+  top: 50%;
   right: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 22px;
+  background: rgba(18, 18, 22, 0.44);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transform: translateY(-50%);
+}
+
+.lyrics-panel__tool {
   width: 34px;
   height: 34px;
   display: grid;
   place-items: center;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 0;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.08);
+  background: transparent;
   color: rgba(255, 255, 255, 0.68);
   cursor: pointer;
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
   transition:
     color var(--duration-fast),
     background var(--duration-fast),
-    border-color var(--duration-fast),
     transform var(--duration-fast);
 }
 
-.lyrics-panel__rematch:hover:not(:disabled) {
+.lyrics-panel__tool:hover:not(:disabled) {
   color: #fff;
   background: rgba(255, 255, 255, 0.16);
-  border-color: rgba(255, 255, 255, 0.22);
-  transform: rotate(-14deg) scale(1.04);
+  transform: scale(1.05);
 }
 
-.lyrics-panel__rematch:active:not(:disabled) {
+.lyrics-panel__rematch:hover:not(:disabled) {
+  transform: rotate(-14deg) scale(1.05);
+}
+
+.lyrics-panel__tool:active:not(:disabled) {
   transform: scale(0.92);
+}
+
+.lyrics-panel__tool:disabled,
+.lyrics-panel__bias:disabled {
+  cursor: default;
+  opacity: 0.34;
 }
 
 .lyrics-panel__rematch:disabled {
   cursor: wait;
-  opacity: 0.55;
+}
+
+.lyrics-panel__tools-divider {
+  width: 22px;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.lyrics-panel__bias {
+  width: 42px;
+  min-height: 38px;
+  padding: 4px 2px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.54);
+  cursor: pointer;
+  font: 700 10px/1 var(--font-body);
+  font-variant-numeric: tabular-nums;
+  transition: color var(--duration-fast), background var(--duration-fast);
+}
+
+.lyrics-panel__bias.is-active,
+.lyrics-panel__bias:hover:not(:disabled) {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.14);
 }
 
 .lyrics-scroll {
@@ -2682,11 +2852,11 @@ body {
   flex-direction: column;
   padding: 16px;
   border-radius: 22px;
-  background: rgba(12, 12, 16, 0.84);
+  background: rgba(16, 16, 20, 0.97);
   border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.44);
-  backdrop-filter: blur(28px) saturate(1.35);
-  -webkit-backdrop-filter: blur(28px) saturate(1.35);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.34);
+  contain: layout paint style;
+  transform: translateZ(0);
 }
 
 .lyrics-drawer__head {
