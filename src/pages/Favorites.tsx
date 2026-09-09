@@ -1,8 +1,15 @@
 import { useState, useCallback, useEffect } from 'react'
-import { Heart, Play, X } from 'lucide-react'
+import { Heart, Pencil, Play, X } from 'lucide-react'
 import { usePlayer } from '@/contexts/PlayerContext'
 import AddToPlaylistButton from '@/components/AddToPlaylistButton'
-import { loadFavoriteTracks, removeFavoriteTrack, FAVORITES_CHANGED_EVENT } from '@/utils/storage'
+import TrackMetadataDialog from '@/components/TrackMetadataDialog'
+import {
+  loadFavoriteTracks,
+  removeFavoriteTrack,
+  updateFavoriteTrackMetadata,
+  FAVORITES_CHANGED_EVENT,
+  type FavoriteMetadataPatch,
+} from '@/utils/storage'
 import {
   ActionButton,
   EmptyLibrary,
@@ -17,6 +24,7 @@ import type { Track } from '@/types'
 
 export default function Favorites() {
   const [tracks, setTracks] = useState<Track[]>(() => loadFavoriteTracks())
+  const [editingTrack, setEditingTrack] = useState<Track | null>(null)
   const player = usePlayer()
 
   useEffect(() => {
@@ -32,6 +40,16 @@ export default function Favorites() {
   const handlePlayAll = useCallback(() => {
     if (tracks.length > 0) player.playAll(tracks)
   }, [tracks, player])
+
+  const handleMetadataSave = useCallback((patch: FavoriteMetadataPatch) => {
+    if (!editingTrack) return
+    const updated = updateFavoriteTrackMetadata(editingTrack.id, patch)
+    if (updated) {
+      setTracks(loadFavoriteTracks())
+      player.updateTrackMetadata(updated)
+    }
+    setEditingTrack(null)
+  }, [editingTrack, player])
 
   const heroImage = tracks[0]?.coverUrl
 
@@ -67,6 +85,9 @@ export default function Favorites() {
                 extra={(
                   <div className="am-extra-actions">
                     <AddToPlaylistButton track={track} size={15} />
+                    <button className="am-icon-button" onClick={(e) => { e.stopPropagation(); setEditingTrack(track) }} title="编辑歌曲信息">
+                      <Pencil size={15} />
+                    </button>
                     <button className="am-icon-danger" onClick={(e) => { e.stopPropagation(); handleRemove(track.id) }} title="取消收藏">
                       <X size={16} />
                     </button>
@@ -77,6 +98,11 @@ export default function Favorites() {
           </TrackList>
         </MusicSection>
       )}
+      <TrackMetadataDialog
+        track={editingTrack}
+        onClose={() => setEditingTrack(null)}
+        onSave={handleMetadataSave}
+      />
     </MusicPageShell>
   )
 }

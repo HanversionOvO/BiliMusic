@@ -79,6 +79,27 @@ export function removeFavoriteTrack(id: string): Track[] {
   return favs
 }
 
+export type FavoriteMetadataPatch = Pick<Track, 'title' | 'artist' | 'album' | 'coverUrl'>
+
+export function updateFavoriteTrackMetadata(id: string, patch: FavoriteMetadataPatch): Track | null {
+  const favorites = loadFavoriteTracks()
+  let updatedTrack: Track | null = null
+  const updatedFavorites = favorites.map((track) => {
+    if (track.id !== id) return track
+    updatedTrack = {
+      ...track,
+      title: patch.title.trim(),
+      artist: patch.artist.trim(),
+      album: patch.album?.trim() || '',
+      coverUrl: patch.coverUrl.trim(),
+      metadataUpdatedAt: new Date().toISOString(),
+    }
+    return updatedTrack
+  })
+  if (updatedTrack) saveFavoriteTracks(updatedFavorites)
+  return updatedTrack
+}
+
 function notifyPlaylistsChanged() {
   window.dispatchEvent(new CustomEvent(PLAYLISTS_CHANGED_EVENT))
 }
@@ -175,15 +196,20 @@ export function deletePlaylist(id: string): void {
 }
 
 export function addTrackToPlaylist(playlistId: string, track: Track): Playlist | null {
+  return addTracksToPlaylist(playlistId, [track])
+}
+
+export function addTracksToPlaylist(playlistId: string, tracks: Track[]): Playlist | null {
   const playlists = loadPlaylists()
   let updatedPlaylist: Playlist | null = null
   const updated = playlists.map((playlist) => {
     if (playlist.id !== playlistId) return playlist
-    const exists = playlist.tracks.some(t => t.id === track.id)
+    const existingIds = new Set(playlist.tracks.map(t => t.id))
+    const additions = tracks.filter(track => !existingIds.has(track.id))
     updatedPlaylist = {
       ...playlist,
-      coverUrl: playlist.coverUrl || track.coverUrl,
-      tracks: exists ? playlist.tracks : [...playlist.tracks, track],
+      coverUrl: playlist.coverUrl || tracks[0]?.coverUrl || '',
+      tracks: [...playlist.tracks, ...additions],
       updatedAt: new Date().toISOString(),
     }
     return updatedPlaylist

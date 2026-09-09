@@ -325,6 +325,7 @@ export interface VideoStat {
 }
 
 export interface VideoPage {
+  page: number
   cid: number
   part: string
   duration: number
@@ -607,11 +608,15 @@ export async function extractAudioFromSearch(
  */
 export async function extractAudioFromVideo(
   bvid: string,
-  fallback?: { aid?: string | number; cid?: string | number },
+  options?: { aid?: string | number; cid?: string | number; page?: number },
 ): Promise<TrackSource> {
   try {
     const detail = await getVideoDetail(bvid)
-    const playData = await getPlayUrl(bvid, detail.cid)
+    const requestedCid = Number(options?.cid) || 0
+    const requestedPage = Number(options?.page) || 0
+    const page = detail.pages?.find((item) => requestedCid ? item.cid === requestedCid : item.page === requestedPage)
+    const cid = page?.cid || requestedCid || detail.cid
+    const playData = await getPlayUrl(bvid, cid)
     const audioUrl = getBestAudioUrl(playData)
 
     const bestAudio = [...playData.dash.audio].sort((a, b) => b.bandwidth - a.bandwidth)[0]
@@ -619,18 +624,18 @@ export async function extractAudioFromVideo(
     return {
       bvid: detail.bvid,
       aid: detail.aid,
-      cid: detail.cid,
-      title: detail.title,
+      cid,
+      title: page?.part || detail.title,
       artist: detail.owner.name,
       coverUrl: toHttpsUrl(detail.pic),
-      duration: detail.duration,
+      duration: page?.duration || detail.duration,
       audioUrl,
       audioQuality: bestAudio.quality,
       audioMimeType: bestAudio.mimeType,
     }
   } catch (e) {
-    if (fallback?.aid && fallback?.cid) {
-      return extractAudioByAvidCid(fallback.aid, fallback.cid, bvid)
+    if (options?.aid && options?.cid) {
+      return extractAudioByAvidCid(options.aid, options.cid, bvid)
     }
     throw e
   }

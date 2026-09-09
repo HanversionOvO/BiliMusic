@@ -36,6 +36,7 @@ interface PlayerActions {
   toggleLike: (trackId: string) => void
   playAll: (tracks: Track[]) => void
   playFromQueue: (index: number) => void
+  updateTrackMetadata: (track: Track) => void
 }
 
 interface PlayerProgress {
@@ -265,10 +266,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     async function loadAndPlay() {
       setLoadingAudio(true)
       try {
-        const fallback = currentTrack!.aid && currentTrack!.cid
-          ? { aid: currentTrack!.aid, cid: currentTrack!.cid }
-          : undefined
-        const source = await extractAudio(currentTrack!.bvid || currentTrack!.id, fallback)
+        const source = await extractAudio(currentTrack!.bvid || currentTrack!.id, {
+          aid: currentTrack!.aid,
+          cid: currentTrack!.cid,
+          page: currentTrack!.page,
+        })
         if (cancelled) return
         const targetProgress = progress > 0 ? progress : 0
         audio.src = source.audioUrl
@@ -283,11 +285,16 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         setDuration(source.duration || audio.duration || 0)
 
         // 更新封面（提取到的可能更高清）
-        if (source.coverUrl) {
+        if (source.coverUrl && !currentTrack!.metadataUpdatedAt) {
           setCurrentTrack(prev => prev ? { ...prev, coverUrl: source.coverUrl } : null)
         }
         // 记录最近播放
-        addRecentTrack({ ...currentTrack!, coverUrl: source.coverUrl || currentTrack!.coverUrl })
+        addRecentTrack({
+          ...currentTrack!,
+          coverUrl: currentTrack!.metadataUpdatedAt
+            ? currentTrack!.coverUrl
+            : (source.coverUrl || currentTrack!.coverUrl),
+        })
       } catch {
         if (!cancelled) {
           // 降级：直接用原始信息触发 play（无音频源，标记为不可播放）
@@ -300,7 +307,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
     loadAndPlay()
     return () => { cancelled = true }
-  }, [currentTrack?.id, currentTrack?.bvid])
+  }, [currentTrack?.id, currentTrack?.bvid, currentTrack?.cid, currentTrack?.page])
 
   // ended 事件
   useEffect(() => {
@@ -507,6 +514,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     setIsPlaying(true)
   }, [isShuffled, queue])
 
+  const updateTrackMetadata = useCallback((track: Track) => {
+    setCurrentTrack(current => current?.id === track.id ? { ...current, ...track } : current)
+    setQueue(current => current.map(item => item.id === track.id ? { ...item, ...track } : item))
+  }, [])
+
   // 更新 shuffledQueueRef
   useEffect(() => {
     shuffledQueueRef.current = isShuffled ? shuffleArray(queue) : queue
@@ -686,11 +698,12 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     toggleLike,
     playAll,
     playFromQueue,
+    updateTrackMetadata,
   }), [
     currentTrack, isPlaying, volume, isMuted, repeatMode, isShuffled, queue, loadingAudio,
     play, pause, togglePlay, next, prev, handleSetVolume, setIsMuted, setRepeatMode, setIsShuffled,
     addToQueue, addTracksToQueue, removeFromQueue, removeMultipleFromQueue, moveInQueue,
-    playNow, playNext, clearQueue, toggleLike, playAll, playFromQueue,
+    playNow, playNext, clearQueue, toggleLike, playAll, playFromQueue, updateTrackMetadata,
   ])
 
   // 进度高频更新（timeupdate ~4Hz）独立成 context，仅 PlayerBar/NowPlaying 订阅

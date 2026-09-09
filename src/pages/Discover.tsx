@@ -3,6 +3,8 @@ import { Disc3, Loader2, Play, RefreshCw, TrendingUp } from 'lucide-react'
 import { usePlayer } from '@/contexts/PlayerContext'
 import { getMusicRanking, type VideoInfo } from '@/services/api'
 import type { Track } from '@/types'
+import BiliVideoRow from '@/components/BiliVideoRow'
+import { createBiliTrackId } from '@/utils/biliTrack'
 import {
   ActionButton,
   EmptyLibrary,
@@ -11,19 +13,20 @@ import {
   MusicHero,
   MusicPageShell,
   MusicSection,
-  TrackList,
-  TrackListRow,
 } from '@/components/AppleMusicPage'
 
 function videoToTrack(video: VideoInfo): Track {
   return {
-    id: video.bvid,
+    id: createBiliTrackId(video.bvid, video.cid),
     title: video.title,
     artist: video.ownerName,
     coverUrl: video.pic,
     duration: video.duration,
     videoUrl: `https://www.bilibili.com/video/${video.bvid}`,
     bvid: video.bvid,
+    aid: video.aid,
+    cid: video.cid || undefined,
+    sourceType: 'video',
     playCount: video.stat?.view || 0,
     isLiked: false,
   }
@@ -100,7 +103,7 @@ export default function Discover() {
                     key={video.bvid}
                     track={track}
                     index={index + 1}
-                    isCurrent={player.currentTrack?.id === video.bvid}
+                    isCurrent={player.currentTrack?.id === track.id}
                     onPlay={() => handlePlayOne(video)}
                   />
                 )
@@ -109,21 +112,19 @@ export default function Discover() {
           </MusicSection>
 
           <MusicSection title="热门排行榜" icon={<Disc3 size={22} />}>
-            <TrackList>
+            <div className="apple-search-list">
               {list.map((video, index) => {
                 const track = videoToTrack(video)
                 return (
-                  <TrackListRow
+                  <BiliVideoRow
                     key={video.bvid}
                     track={track}
-                    index={featured.length + index + 1}
-                    isCurrent={player.currentTrack?.id === video.bvid}
-                    isPlaying={player.isPlaying}
-                    onPlay={() => handlePlayOne(video)}
+                    subtitle={`排行榜第 ${featured.length + index + 1} 名 · ${video.stat?.view || 0} 播放`}
+                    durationText={`${Math.floor(video.duration / 60)}:${String(video.duration % 60).padStart(2, '0')}`}
                   />
                 )
               })}
-            </TrackList>
+            </div>
           </MusicSection>
         </>
       )}

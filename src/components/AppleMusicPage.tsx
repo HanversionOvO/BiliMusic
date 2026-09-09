@@ -167,7 +167,7 @@ export function TrackListRow({
       </div>
       <div className="am-track-row__main">
         <h3>{track.title}</h3>
-        <p>{track.artist}</p>
+        <p>{track.artist}{track.album ? ` · ${track.album}` : ''}</p>
       </div>
       <span className="am-track-row__duration">{formatDuration(track.duration)}</span>
       <div className="am-track-row__actions">

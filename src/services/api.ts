@@ -83,11 +83,20 @@ export interface VideoInfo {
   ownerMid: number
   duration: number
   cid: number
+  pageCount?: number
+  pages?: VideoPageInfo[]
   stat: {
     view: number
     like: number
     favorite: number
   }
+}
+
+export interface VideoPageInfo {
+  page: number
+  cid: number
+  title: string
+  duration: number
 }
 
 export async function getVideoDetail(bvid: string): Promise<VideoInfo> {
@@ -104,6 +113,13 @@ export async function getVideoDetail(bvid: string): Promise<VideoInfo> {
     ownerMid: data.owner?.mid,
     duration: data.duration,
     cid: data.cid,
+    pageCount: data.videos || data.pages?.length || 1,
+    pages: (data.pages || []).map((page) => ({
+      page: page.page,
+      cid: page.cid,
+      title: page.part,
+      duration: page.duration,
+    })),
     stat: {
       view: data.stat?.view,
       like: data.stat?.like,
@@ -169,11 +185,11 @@ export async function getVideoComments(
 
 export async function extractAudio(
   bvid: string,
-  fallback?: { aid?: string | number; cid?: string | number },
+  options?: { aid?: string | number; cid?: string | number; page?: number },
 ): Promise<TrackSource> {
   // 统一走渲染进程浏览器 fetch：主进程 net.fetch 会被 B站反爬拦截（-352）
   const { extractAudioFromVideo } = await import('@/services/bilibiliApi')
-  return extractAudioFromVideo(bvid, fallback)
+  return extractAudioFromVideo(bvid, options)
 }
 
 // ===== 下载音频 =====

@@ -154,7 +154,7 @@ export async function runSync(): Promise<SyncResult> {
         loadFavoriteTombstones(),
         remote?.favoriteTombstones ?? [],
         (t) => t.id,
-        (t) => t.likedAt || EPOCH,
+        (t) => t.metadataUpdatedAt || t.likedAt || EPOCH,
       )
 
       savePlaylists(pl.items)

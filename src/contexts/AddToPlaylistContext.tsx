@@ -1,17 +1,19 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { Check, Music, X } from 'lucide-react'
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
-import { addTrackToPlaylist, loadPlaylists, PLAYLISTS_CHANGED_EVENT } from '@/utils/storage'
+import { addTracksToPlaylist, loadPlaylists, PLAYLISTS_CHANGED_EVENT } from '@/utils/storage'
 import type { Playlist, Track } from '@/types'
 
 interface AddToPlaylistContextValue {
   openAddToPlaylist: (track: Track) => void
+  openAddTracksToPlaylist: (tracks: Track[]) => void
 }
 
 const AddToPlaylistContext = createContext<AddToPlaylistContextValue | null>(null)
 
 export function AddToPlaylistProvider({ children }: { children: ReactNode }) {
-  const [track, setTrack] = useState<Track | null>(null)
+  const [tracks, setTracks] = useState<Track[]>([])
+  const track = tracks[0] || null
   const [playlists, setPlaylists] = useState<Playlist[]>(() => loadPlaylists())
   const [addedId, setAddedId] = useState<string | null>(null)
 
@@ -26,25 +28,32 @@ export function AddToPlaylistProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const close = useCallback(() => {
-    setTrack(null)
+    setTracks([])
     setAddedId(null)
   }, [])
 
   const openAddToPlaylist = useCallback((nextTrack: Track) => {
     setPlaylists(loadPlaylists())
     setAddedId(null)
-    setTrack(nextTrack)
+    setTracks([nextTrack])
+  }, [])
+
+  const openAddTracksToPlaylist = useCallback((nextTracks: Track[]) => {
+    if (nextTracks.length === 0) return
+    setPlaylists(loadPlaylists())
+    setAddedId(null)
+    setTracks(nextTracks)
   }, [])
 
   const choose = useCallback((playlist: Playlist) => {
     if (!track) return
-    addTrackToPlaylist(playlist.id, track)
+    addTracksToPlaylist(playlist.id, tracks)
     setAddedId(playlist.id)
     setTimeout(close, 520)
-  }, [close, track])
+  }, [close, track, tracks])
 
   return (
-    <AddToPlaylistContext.Provider value={{ openAddToPlaylist }}>
+    <AddToPlaylistContext.Provider value={{ openAddToPlaylist, openAddTracksToPlaylist }}>
       {children}
       <AnimatePresence>
         {track && (
@@ -77,7 +86,7 @@ export function AddToPlaylistProvider({ children }: { children: ReactNode }) {
               <div className="add-playlist-track">
                 <div>{track.coverUrl ? <img src={track.coverUrl} alt="" /> : <Music size={20} />}</div>
                 <span>
-                  <strong>{track.title}</strong>
+                  <strong>{tracks.length > 1 ? `${track.parentTitle || '分P视频'}（${tracks.length} 首）` : track.title}</strong>
                   <small>{track.artist}</small>
                 </span>
               </div>
@@ -86,7 +95,7 @@ export function AddToPlaylistProvider({ children }: { children: ReactNode }) {
                 {playlists.length === 0 ? (
                   <div className="add-playlist-empty">还没有歌单，请先在侧边栏新建歌单。</div>
                 ) : playlists.map((playlist) => {
-                  const already = playlist.tracks.some(t => t.id === track.id)
+                  const already = tracks.every(item => playlist.tracks.some(t => t.id === item.id))
                   const justAdded = addedId === playlist.id
                   return (
                     <button key={playlist.id} type="button" onClick={() => choose(playlist)}>

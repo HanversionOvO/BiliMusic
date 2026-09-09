@@ -116,9 +116,43 @@ function loadAppIcon(fileName = 'icon.png') {
   return nativeImage.createFromPath(iconPath)
 }
 
+// macOS 菜单栏使用紧凑的双色线框图标。主体使用高对比纯白线条，适配
+// TopNotch 等纯黑菜单栏；黑色只保留在内部细节，不再包围白色轮廓。
+function createMacTrayIcon() {
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 18 18">
+      <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M6.1 4.4 4.25 2.65M11.9 4.4l1.85-1.75"
+          stroke="#fff" stroke-width="2.05"/>
+        <rect x="2.15" y="4.4" width="13.7" height="10.6" rx="3.15"
+          stroke="#fff" stroke-width="2.15"/>
+      </g>
+      <circle cx="6.05" cy="9" r=".92" fill="#000" stroke="#fff" stroke-width=".72"/>
+      <circle cx="11.95" cy="9" r=".92" fill="#000" stroke="#fff" stroke-width=".72"/>
+      <path d="M11.9 11.45v2.05a1.02 1.02 0 1 1-.72-.97v-2.2l2.15-.47v1.8a1.02 1.02 0 1 1-.72-.97v-1.7l-3 .66v2.85"
+        fill="none" stroke="#fff" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M11.9 11.45v1.25m-.72-2.37 2.15-.47v1.03"
+        fill="none" stroke="#000" stroke-width=".38" stroke-linecap="round"/>
+    </svg>
+  `
+  const dataUrl = `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`
+  const icon = nativeImage.createFromDataURL(dataUrl).resize({ width: 18, height: 18 })
+
+  // This icon deliberately contains fixed white and black pixels. Keeping it as a
+  // non-template image prevents macOS from recolouring the white strokes to black
+  // when the system appearance is light but TopNotch paints the menu bar black.
+  icon.setTemplateImage(false)
+  if (!icon.isEmpty()) return icon
+
+  // Keep the tray usable if SVG decoding is unavailable on an older Electron build.
+  const fallback = loadAppIcon('tray.png').resize({ width: 18, height: 18 })
+  fallback.setTemplateImage(false)
+  return fallback
+}
+
 function createTrayIcon() {
+  if (process.platform === 'darwin') return createMacTrayIcon()
   const trayIcon = isHarmonyOS ? loadAppIcon('tray.png') : loadAppIcon()
-  // 托盘图标尺寸较小，缩放到 32px 以兼顾标准与高 DPI 显示
   return trayIcon.resize({ width: 32, height: 32 })
 }
 

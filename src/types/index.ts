@@ -2,6 +2,7 @@ export interface Track {
   id: string
   title: string
   artist: string
+  album?: string
   coverUrl: string
   duration: number
   videoUrl: string
@@ -9,9 +10,14 @@ export interface Track {
   // 音乐中心曲目的顶层 avid+cid：当 bvid 稿件不存在（-404）时回退直取音乐流
   aid?: string | number
   cid?: string | number
+  // 分P视频中的页码及所属视频标题；旧数据缺省时仍按普通视频/P1处理
+  page?: number
+  parentTitle?: string
+  sourceType?: 'video' | 'video-part' | 'music'
   playCount: number
   isLiked: boolean
   likedAt?: string // 收藏时间，供云同步按 like/unlike 时间合并
+  metadataUpdatedAt?: string // 用户编辑收藏元数据的时间，供云同步处理版本冲突
 }
 
 export interface Playlist {

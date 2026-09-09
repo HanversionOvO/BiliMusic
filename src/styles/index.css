@@ -445,6 +445,70 @@ body {
   cursor: not-allowed;
 }
 
+.metadata-dialog {
+  width: min(460px, calc(100vw - 40px));
+}
+
+.metadata-dialog__preview {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  margin-bottom: 17px;
+  padding: 10px;
+  border-radius: 15px;
+  background: color-mix(in srgb, var(--color-border) 42%, transparent);
+}
+
+.metadata-dialog__preview > div {
+  flex: 0 0 auto;
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 11px;
+  background: var(--color-border);
+  color: var(--color-muted);
+}
+
+.metadata-dialog__preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.metadata-dialog__preview span {
+  min-width: 0;
+}
+
+.metadata-dialog__preview strong,
+.metadata-dialog__preview small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.metadata-dialog__preview strong {
+  color: var(--color-foreground);
+  font-size: 15px;
+}
+
+.metadata-dialog__preview small {
+  margin-top: 4px;
+  color: var(--color-muted-foreground);
+  font-size: 12px;
+}
+
+.metadata-dialog__source {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-muted-foreground);
+  font-size: 11px;
+}
+
 /* ===== Glass Utilities ===== */
 
 .glass-panel {
@@ -1273,6 +1337,138 @@ body {
   transform: translateX(0);
 }
 
+.bili-video-group {
+  border-bottom: 1px solid rgba(148, 153, 160, 0.14);
+}
+
+.bili-video-group:last-child {
+  border-bottom: 0;
+}
+
+.bili-video-group > .apple-search-row {
+  border-bottom: 0;
+}
+
+.bili-parts-toggle {
+  position: relative;
+  z-index: 2;
+  flex: 0 0 auto;
+  width: 31px;
+  height: 31px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-muted);
+  cursor: pointer;
+  transition: color var(--duration-fast), background var(--duration-fast), transform var(--duration-normal);
+}
+
+.bili-parts-toggle:hover {
+  color: var(--color-primary);
+  background: rgba(251, 114, 153, 0.12);
+}
+
+.bili-parts-toggle.is-expanded {
+  transform: rotate(180deg);
+}
+
+.bili-video-error {
+  margin-top: 2px;
+  color: #e85c74;
+  font-size: 11px;
+}
+
+.bili-parts-panel {
+  overflow: hidden;
+  margin: 0 10px 8px 72px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--color-border) 45%, transparent);
+}
+
+.bili-parts-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 11px;
+  border-bottom: 1px solid rgba(148, 153, 160, 0.13);
+}
+
+.bili-parts-toolbar > span,
+.bili-parts-toolbar > div,
+.bili-parts-toolbar button {
+  display: flex;
+  align-items: center;
+}
+
+.bili-parts-toolbar > span {
+  gap: 6px;
+  color: var(--color-muted);
+  font-size: var(--text-caption);
+  font-weight: 700;
+}
+
+.bili-parts-toolbar > div {
+  gap: 5px;
+}
+
+.bili-parts-toolbar button {
+  gap: 4px;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: rgba(251, 114, 153, 0.11);
+  color: var(--color-primary);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.bili-part-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 43px;
+  padding: 5px 10px;
+  border-bottom: 1px solid rgba(148, 153, 160, 0.1);
+  cursor: pointer;
+  transition: background var(--duration-fast);
+}
+
+.bili-part-row:last-child {
+  border-bottom: 0;
+}
+
+.bili-part-row:hover,
+.bili-part-row.is-current {
+  background: rgba(251, 114, 153, 0.09);
+}
+
+.bili-part-index,
+.bili-part-duration {
+  flex: 0 0 auto;
+  color: var(--color-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.bili-part-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-foreground);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bili-part-row.is-current .bili-part-title {
+  color: var(--color-primary);
+}
+
 .apple-search-enter {
   display: inline-flex;
   align-items: center;
@@ -1599,6 +1795,24 @@ body {
   .apple-search-actions {
     opacity: 1;
     transform: none;
+  }
+
+  .bili-parts-panel {
+    margin-left: 10px;
+  }
+
+  .bili-parts-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .bili-parts-toolbar > div {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .bili-part-duration {
+    display: none;
   }
 
   .apple-search-enter span {

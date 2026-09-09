@@ -3,7 +3,7 @@ import { ArrowLeft, ChevronRight, Loader2, Music, Play, Search, Sparkles, UserRo
 import { useState, useCallback, useRef, useEffect, type ReactNode } from 'react'
 import { useLocation } from 'react-router-dom'
 import { usePlayer } from '@/contexts/PlayerContext'
-import TrackActions from '@/components/TrackActions'
+import BiliVideoRow from '@/components/BiliVideoRow'
 import {
   searchVideo,
   searchUsers,
@@ -428,7 +428,7 @@ export default function SearchPage() {
             ) : (
               <motion.div className="apple-search-list" variants={listMotion}>
                 {results.map((result) => (
-                  <VideoRow
+                  <BiliVideoRow
                     key={result.bvid || result.aid}
                     track={searchItemToTrack(result)}
                     subtitle={`${result.author} · ${formatCount(result.play)}播放`}
@@ -503,47 +503,6 @@ function ResultsHeader({ query, total, mutedText }: { query: string; total: numb
         <h2>{query ? `"${query}"` : '关键词'}</h2>
       </div>
       <span>{mutedText || `共 ${total.toLocaleString()} 项`}</span>
-    </motion.div>
-  )
-}
-
-function VideoRow({ track, subtitle, durationText }: {
-  track: Track
-  subtitle: string
-  durationText?: string
-}) {
-  const player = usePlayer()
-  const isCurrent = player.currentTrack?.id === track.id
-
-  return (
-    <motion.div
-      className={`apple-search-row video-row ${isCurrent ? 'is-current' : ''}`}
-      onClick={() => player.playNow(track)}
-      variants={itemMotion}
-      whileHover={{ y: -1 }}
-      whileTap={{ scale: 0.995 }}
-      transition={{ duration: 0.18 }}
-    >
-      <div className="apple-search-cover">
-        {track.coverUrl ? (
-          <img src={track.coverUrl} alt="" loading="lazy" />
-        ) : (
-          <div className="apple-search-cover__fallback"><Music size={20} /></div>
-        )}
-        <div className="apple-search-cover__play">
-          <Play size={18} fill="currentColor" />
-        </div>
-      </div>
-
-      <div className="apple-search-row__main">
-        <div className="apple-search-row__title">{track.title}</div>
-        <div className="apple-search-row__meta">{subtitle}</div>
-      </div>
-
-      {durationText && <span className="apple-search-duration">{durationText}</span>}
-      <div className="apple-search-actions">
-        <TrackActions track={track} />
-      </div>
     </motion.div>
   )
 }
@@ -684,7 +643,7 @@ function UserSpaceView({ user, onBack }: { user: SelectedUser; onBack: () => voi
         <>
           <motion.div className="apple-search-list" variants={listMotion} initial="initial" animate="animate">
             {videos.map((video) => (
-              <VideoRow
+              <BiliVideoRow
                 key={video.bvid}
                 track={toTrack(video)}
                 subtitle={`${formatCount(video.play)}播放`}
