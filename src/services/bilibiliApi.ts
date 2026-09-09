@@ -4,6 +4,8 @@
  * 已验证的 API 接口，通过浏览器 Cookie 认证访问 B 站接口
  */
 
+import { inferArtistFromTitle } from '@/utils/trackMetadata'
+
 const BILI_API = 'https://api.bilibili.com'
 
 // B站图片地址统一转 https：http:// 的 hdslb 图在渲染进程会加载失败
@@ -654,6 +656,8 @@ export interface TrackSource {
   cid: number
   title: string
   artist: string
+  uploaderName?: string
+  uploaderMid?: string | number
   coverUrl: string
   duration: number
   audioUrl: string
@@ -705,7 +709,9 @@ export async function extractAudioFromVideo(
       aid: detail.aid,
       cid,
       title: page?.part || detail.title,
-      artist: detail.owner.name,
+      artist: inferArtistFromTitle(page?.part || detail.title),
+      uploaderName: detail.owner.name,
+      uploaderMid: detail.owner.mid,
       coverUrl: toHttpsUrl(detail.pic),
       duration: page?.duration || detail.duration,
       audioUrl,

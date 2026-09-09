@@ -41,7 +41,7 @@ export default function TrackMetadataDialog({ track, onClose, onSave }: {
 
   const submit = (event: FormEvent) => {
     event.preventDefault()
-    if (!title.trim() || !artist.trim()) return
+    if (!title.trim()) return
     onSave({ title, artist, album, coverUrl })
   }
 
@@ -72,18 +72,18 @@ export default function TrackMetadataDialog({ track, onClose, onSave }: {
 
             <div className="metadata-dialog__preview">
               <div>{previewCoverUrl ? <img src={previewCoverUrl} alt="封面预览" /> : <Image size={26} />}</div>
-              <span><strong>{title || '歌曲名称'}</strong><small>{artist || '歌手'}{album ? ` · ${album}` : ''}</small></span>
+              <span><strong>{title || '歌曲名称'}</strong><small>{artist || '歌手未知'}{album ? ` · ${album}` : ''}</small></span>
             </div>
 
             <label className="playlist-field"><span>歌曲名称</span><input autoFocus value={title} onChange={e => setTitle(e.target.value)} /></label>
-            <label className="playlist-field"><span>歌手</span><input value={artist} onChange={e => setArtist(e.target.value)} /></label>
+            <label className="playlist-field"><span>歌手（可选）</span><input value={artist} onChange={e => setArtist(e.target.value)} /></label>
             <label className="playlist-field"><span>专辑（可选）</span><input value={album} onChange={e => setAlbum(e.target.value)} /></label>
             <label className="playlist-field"><span>封面图片地址（可选）</span><input type="url" value={coverUrl} onChange={e => setCoverUrl(e.target.value)} placeholder="https://..." /></label>
 
-            <div className="metadata-dialog__source"><Music size={13} />播放来源与分 P 定位信息不会被修改</div>
+            <div className="metadata-dialog__source"><Music size={13} />UP 主：{track.uploaderName || '未知'}；播放来源与分 P 定位信息不会被修改</div>
             <div className="playlist-dialog__actions">
               <button type="button" onClick={onClose}>取消</button>
-              <button type="submit" disabled={!title.trim() || !artist.trim()}>保存修改</button>
+              <button type="submit" disabled={!title.trim()}>保存修改</button>
             </div>
           </motion.form>
         </motion.div>

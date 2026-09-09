@@ -1,4 +1,4 @@
-import { useState, type CSSProperties, type ReactNode } from 'react'
+import { memo, useState, type CSSProperties, type ReactNode } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   X,
@@ -14,15 +14,9 @@ import {
 import { usePlayer } from '@/contexts/PlayerContext'
 import { useAddToPlaylist } from '@/contexts/AddToPlaylistContext'
 import type { Track } from '@/types'
+import { trackCreditLine } from '@/utils/trackMetadata'
 
-const panelSpring = {
-  type: 'spring',
-  stiffness: 330,
-  damping: 28,
-  mass: 0.8,
-} as const
-
-export default function PlayQueue({ open, onClose }: { open: boolean; onClose: () => void }) {
+function PlayQueue({ open, onClose }: { open: boolean; onClose: () => void }) {
   const player = usePlayer()
   const { openAddToPlaylist } = useAddToPlaylist()
   const [selecting, setSelecting] = useState(false)
@@ -77,10 +71,7 @@ export default function PlayQueue({ open, onClose }: { open: boolean; onClose: (
     <AnimatePresence>
       {open && (
         <>
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+          <div
             onClick={onClose}
             style={{
               position: 'fixed',
@@ -91,10 +82,10 @@ export default function PlayQueue({ open, onClose }: { open: boolean; onClose: (
           />
 
           <motion.div
-            initial={{ opacity: 0, y: 22, scale: 0.96 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 18, scale: 0.96 }}
-            transition={panelSpring}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 6 }}
+            transition={{ duration: 0.14, ease: 'easeOut' }}
             onClick={(e) => e.stopPropagation()}
             style={{
               position: 'fixed',
@@ -107,11 +98,13 @@ export default function PlayQueue({ open, onClose }: { open: boolean; onClose: (
               flexDirection: 'column',
               borderRadius: 18,
               background: 'var(--queue-bg)',
-              backdropFilter: 'blur(34px) saturate(175%)',
-              WebkitBackdropFilter: 'blur(34px) saturate(175%)',
+              backdropFilter: 'blur(8px) saturate(120%)',
+              WebkitBackdropFilter: 'blur(8px) saturate(120%)',
               border: '1px solid var(--queue-border)',
               boxShadow: 'var(--queue-shadow)',
               overflow: 'hidden',
+              contain: 'layout paint style',
+              willChange: 'transform, opacity',
               color: 'var(--queue-text)',
               fontFamily:
                 "'SF Pro Display', '-apple-system', BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif",
@@ -182,20 +175,9 @@ export default function PlayQueue({ open, onClose }: { open: boolean; onClose: (
               {queue.length === 0 ? (
                 <EmptyQueue />
               ) : (
-                <AnimatePresence initial={false}>
+                <div>
                   {queue.map((track, index) => (
-                    <motion.div
-                      key={track.id}
-                      layout
-                      initial={{ opacity: 0, height: 0, y: 6 }}
-                      animate={{ opacity: 1, height: 'auto', y: 0 }}
-                      exit={{ opacity: 0, height: 0, y: -4 }}
-                      transition={{
-                        opacity: { duration: 0.18 },
-                        height: { duration: 0.2 },
-                        layout: { type: 'spring', bounce: 0.16, duration: 0.45 },
-                      }}
-                    >
+                    <div key={track.id} className="play-queue-row-shell">
                       <QueueRow
                         track={track}
                         isCurrent={track.id === currentId}
@@ -216,9 +198,9 @@ export default function PlayQueue({ open, onClose }: { open: boolean; onClose: (
                           setOverIndex(null)
                         }}
                       />
-                    </motion.div>
+                    </div>
                   ))}
-                </AnimatePresence>
+                </div>
               )}
             </div>
 
@@ -287,6 +269,8 @@ export default function PlayQueue({ open, onClose }: { open: boolean; onClose: (
   )
 }
 
+export default memo(PlayQueue)
+
 function QueueRow({
   track,
   isCurrent,
@@ -335,11 +319,10 @@ function QueueRow({
         onDrop()
       }}
       onDragEnd={onDragEnd}
-      onClick={selecting ? onSelect : onPlay}
+      onClick={selecting ? onSelect : undefined}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       whileHover={{ backgroundColor: selected || isCurrent ? 'var(--queue-row-hover-strong)' : 'var(--queue-row-hover)' }}
-      whileTap={{ scale: 0.992 }}
       transition={{ duration: 0.16 }}
       style={{
         position: 'relative',
@@ -351,7 +334,7 @@ function QueueRow({
         borderRadius: isDragOver ? 7 : 10,
         background: selected || isCurrent ? 'var(--queue-row-active)' : 'transparent',
         borderTop: isDragOver ? '2px solid #ff375f' : '2px solid transparent',
-        cursor: 'pointer',
+        cursor: selecting ? 'pointer' : 'default',
         overflow: 'hidden',
       }}
     >
@@ -373,6 +356,11 @@ function QueueRow({
       </div>
 
       <div
+        onClick={(event) => {
+          if (selecting) return
+          event.stopPropagation()
+          onPlay()
+        }}
         style={{
           width: 42,
           height: 42,
@@ -382,6 +370,7 @@ function QueueRow({
           overflow: 'hidden',
           flexShrink: 0,
           position: 'relative',
+          cursor: 'pointer',
           boxShadow: '0 8px 18px rgba(0, 0, 0, 0.2)',
         }}
       >
@@ -408,7 +397,14 @@ function QueueRow({
         </motion.div>
       </div>
 
-      <div style={{ flex: 1, minWidth: 0, paddingRight: 4 }}>
+      <div
+        onClick={(event) => {
+          if (selecting) return
+          event.stopPropagation()
+          onPlay()
+        }}
+        style={{ flex: 1, minWidth: 0, paddingRight: 4, cursor: 'pointer' }}
+      >
         <div
           style={{
             color: isCurrent ? '#ff4f7a' : 'var(--queue-text)',
@@ -436,7 +432,7 @@ function QueueRow({
             transition: 'color 160ms ease',
           }}
         >
-          {track.artist}
+          {trackCreditLine(track)}
         </div>
       </div>
 

@@ -2,6 +2,9 @@ export interface Track {
   id: string
   title: string
   artist: string
+  // Bilibili 投稿者与音乐歌手是不同概念；只有 uploader 字段用于跳转 UP 主空间。
+  uploaderName?: string
+  uploaderMid?: string | number
   album?: string
   coverUrl: string
   duration: number

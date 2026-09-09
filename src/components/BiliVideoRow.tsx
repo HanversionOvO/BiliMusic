@@ -7,6 +7,7 @@ import { useAddToPlaylist } from '@/contexts/AddToPlaylistContext'
 import TrackActions from '@/components/TrackActions'
 import { videoInfoToTrack, videoPageToTrack } from '@/utils/biliTrack'
 import type { Track } from '@/types'
+import { isSameTrack } from '@/utils/trackIdentity'
 
 const detailCache = new Map<string, Promise<VideoInfo>>()
 
@@ -45,7 +46,7 @@ export default function BiliVideoRow({ track, subtitle, durationText, resolvePar
     [detail],
   )
   const primaryTrack = detail ? videoInfoToTrack(detail) : track
-  const isCurrent = player.currentTrack?.id === primaryTrack.id
+  const isCurrent = isSameTrack(player.currentTrack, primaryTrack)
 
   const playResolvedVideo = (data: VideoInfo) => {
     const resolvedParts = data.pages?.map((page) => videoPageToTrack(data, page)) || []
@@ -96,20 +97,24 @@ export default function BiliVideoRow({ track, subtitle, durationText, resolvePar
     }
   }
 
+  const handlePlayKeyDown = (event: React.KeyboardEvent, play: () => void) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return
+    event.preventDefault()
+    play()
+  }
+
   return (
     <div className={`bili-video-group ${expanded ? 'is-expanded' : ''}`}>
       <motion.div
         className={`apple-search-row video-row ${isCurrent ? 'is-current' : ''}`}
-        onClick={playPrimary}
         whileHover={{ y: -1 }}
-        whileTap={{ scale: 0.995 }}
         transition={{ duration: 0.18 }}
       >
-        <div className="apple-search-cover">
+        <div className="apple-search-cover" onClick={playPrimary} role="button" tabIndex={0} onKeyDown={(event) => handlePlayKeyDown(event, () => { void playPrimary() })}>
           {track.coverUrl ? <img src={track.coverUrl} alt="" loading="lazy" /> : <div className="apple-search-cover__fallback"><Music size={20} /></div>}
           <div className="apple-search-cover__play"><Play size={18} fill="currentColor" /></div>
         </div>
-        <div className="apple-search-row__main">
+        <div className="apple-search-row__main" onClick={playPrimary} role="button" tabIndex={0} onKeyDown={(event) => handlePlayKeyDown(event, () => { void playPrimary() })}>
           <div className="apple-search-row__title">{track.title}</div>
           <div className="apple-search-row__meta">
             {subtitle}{detail && (detail.pageCount || parts.length) > 1 ? ` · ${detail.pageCount || parts.length}P` : ''}
@@ -148,11 +153,18 @@ export default function BiliVideoRow({ track, subtitle, durationText, resolvePar
             {parts.map((part, index) => (
               <div
                 key={part.id}
-                className={`bili-part-row ${player.currentTrack?.id === part.id ? 'is-current' : ''}`}
-                onClick={() => player.playNow(part)}
+                className={`bili-part-row ${isSameTrack(player.currentTrack, part) ? 'is-current' : ''}`}
               >
                 <span className="bili-part-index">{String(index + 1).padStart(2, '0')}</span>
-                <span className="bili-part-title">{part.title}</span>
+                <span
+                  className="bili-part-title"
+                  onClick={() => player.playNow(part)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(event) => handlePlayKeyDown(event, () => player.playNow(part))}
+                >
+                  {part.title}
+                </span>
                 <span className="bili-part-duration">{formatDuration(part.duration)}</span>
                 <TrackActions track={part} size={15} />
               </div>

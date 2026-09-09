@@ -21,6 +21,7 @@ import {
   defaultIconFor,
 } from '@/components/AppleMusicPage'
 import type { Track } from '@/types'
+import { isSameTrack } from '@/utils/trackIdentity'
 
 export default function Favorites() {
   const [tracks, setTracks] = useState<Track[]>(() => loadFavoriteTracks())
@@ -79,7 +80,7 @@ export default function Favorites() {
                 key={track.id + String(index)}
                 track={track}
                 index={index + 1}
-                isCurrent={player.currentTrack?.id === track.id}
+                isCurrent={isSameTrack(player.currentTrack, track)}
                 isPlaying={player.isPlaying}
                 onPlay={() => player.playNow(track)}
                 extra={(

@@ -13,6 +13,7 @@ import {
   defaultIconFor,
 } from '@/components/AppleMusicPage'
 import type { Track } from '@/types'
+import { isSameTrack } from '@/utils/trackIdentity'
 
 export default function Recent() {
   const [tracks, setTracks] = useState<Track[]>(() => loadRecentTracks())
@@ -61,7 +62,7 @@ export default function Recent() {
                 key={track.id + String(index)}
                 track={track}
                 index={index + 1}
-                isCurrent={player.currentTrack?.id === track.id}
+                isCurrent={isSameTrack(player.currentTrack, track)}
                 isPlaying={player.isPlaying}
                 onPlay={() => player.playNow(track)}
               />

@@ -3,7 +3,8 @@ import { Flame, Loader2, Play, RefreshCw, Sparkles } from 'lucide-react'
 import { usePlayer } from '@/contexts/PlayerContext'
 import { getMusicCenterRank, getNewSongs, type MusicSong } from '@/services/api'
 import type { Track } from '@/types'
-import { createBiliTrackId } from '@/utils/biliTrack'
+import { createBiliMusicTrackId } from '@/utils/biliTrack'
+import { isSameTrack } from '@/utils/trackIdentity'
 import {
   ActionButton,
   EmptyLibrary,
@@ -18,7 +19,7 @@ import {
 
 function songToTrack(s: MusicSong): Track {
   return {
-    id: createBiliTrackId(s.bvid, s.cid),
+    id: createBiliMusicTrackId(s.aid, s.cid),
     title: s.title,
     artist: s.artist,
     coverUrl: s.coverUrl,
@@ -110,7 +111,7 @@ export default function Recommend() {
                     key={song.bvid}
                     track={{ ...track, playCount: 0 }}
                     index={index + 1}
-                    isCurrent={player.currentTrack?.id === track.id}
+                    isCurrent={isSameTrack(player.currentTrack, track)}
                     onPlay={() => handlePlay(song)}
                   />
                 )
@@ -127,7 +128,7 @@ export default function Recommend() {
                     key={song.bvid}
                     track={track}
                     index={index + 1}
-                    isCurrent={player.currentTrack?.id === track.id}
+                    isCurrent={isSameTrack(player.currentTrack, track)}
                     isPlaying={player.isPlaying}
                     onPlay={() => handlePlay(song)}
                   />

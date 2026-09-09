@@ -2,6 +2,7 @@ import { motion } from 'framer-motion'
 import { Clock, Heart, Music, Play, Trash2 } from 'lucide-react'
 import TrackActions from '@/components/TrackActions'
 import type { Track } from '@/types'
+import { trackCreditLine } from '@/utils/trackMetadata'
 
 export function MusicPageShell({ children }: { children: React.ReactNode }) {
   return (
@@ -118,7 +119,7 @@ export function FeaturedTrackCard({
       <div className="am-feature-card__body">
         <div>
           <h3>{track.title}</h3>
-          <p>{track.artist} · {formatCount(track.playCount || 0)}播放</p>
+          <p>{trackCreditLine(track)} · {formatCount(track.playCount || 0)}播放</p>
         </div>
         <TrackActions track={track} size={16} />
       </div>
@@ -150,9 +151,7 @@ export function TrackListRow({
   return (
     <motion.div
       className={`am-track-row ${isCurrent ? 'is-current' : ''}`}
-      onClick={onPlay}
       whileHover={{ y: -1 }}
-      whileTap={{ scale: 0.995 }}
       transition={{ duration: 0.18 }}
     >
       {index !== undefined && (
@@ -161,13 +160,13 @@ export function TrackListRow({
         </span>
       )}
       {leading && <div className="am-track-row__leading">{leading}</div>}
-      <div className="am-track-row__cover">
+      <div className="am-track-row__cover" onClick={onPlay} role="button" tabIndex={0} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onPlay() } }}>
         {track.coverUrl ? <img src={track.coverUrl} alt="" loading="lazy" /> : <CoverFallback />}
         <span><Play size={16} fill="currentColor" /></span>
       </div>
-      <div className="am-track-row__main">
+      <div className="am-track-row__main" onClick={onPlay} role="button" tabIndex={0} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onPlay() } }}>
         <h3>{track.title}</h3>
-        <p>{track.artist}{track.album ? ` · ${track.album}` : ''}</p>
+        <p>{trackCreditLine(track)}</p>
       </div>
       <span className="am-track-row__duration">{formatDuration(track.duration)}</span>
       <div className="am-track-row__actions">

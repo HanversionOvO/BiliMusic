@@ -19,6 +19,7 @@ import {
   removeTracksFromPlaylist,
 } from '@/utils/storage'
 import type { Playlist } from '@/types'
+import { isSameTrack } from '@/utils/trackIdentity'
 
 export default function Playlists() {
   const { playlistId } = useParams()
@@ -212,7 +213,7 @@ function PlaylistDetail({ playlistId }: { playlistId: string }) {
                 key={track.id + String(index)}
                 track={track}
                 index={index + 1}
-                isCurrent={player.currentTrack?.id === track.id}
+                isCurrent={isSameTrack(player.currentTrack, track)}
                 isPlaying={player.isPlaying}
                 onPlay={() => editing ? toggleSelected(track.id) : player.playNow(track)}
                 leading={editing ? (

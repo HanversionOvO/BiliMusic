@@ -2,6 +2,8 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { Check, Music, X } from 'lucide-react'
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
 import { addTracksToPlaylist, loadPlaylists, PLAYLISTS_CHANGED_EVENT } from '@/utils/storage'
+import { trackCreditLine } from '@/utils/trackMetadata'
+import { isSameTrack } from '@/utils/trackIdentity'
 import type { Playlist, Track } from '@/types'
 
 interface AddToPlaylistContextValue {
@@ -87,7 +89,7 @@ export function AddToPlaylistProvider({ children }: { children: ReactNode }) {
                 <div>{track.coverUrl ? <img src={track.coverUrl} alt="" /> : <Music size={20} />}</div>
                 <span>
                   <strong>{tracks.length > 1 ? `${track.parentTitle || '分P视频'}（${tracks.length} 首）` : track.title}</strong>
-                  <small>{track.artist}</small>
+                  <small>{trackCreditLine(track)}</small>
                 </span>
               </div>
 
@@ -95,7 +97,7 @@ export function AddToPlaylistProvider({ children }: { children: ReactNode }) {
                 {playlists.length === 0 ? (
                   <div className="add-playlist-empty">还没有歌单，请先在侧边栏新建歌单。</div>
                 ) : playlists.map((playlist) => {
-                  const already = tracks.every(item => playlist.tracks.some(t => t.id === item.id))
+                  const already = tracks.every(item => playlist.tracks.some(t => isSameTrack(t, item)))
                   const justAdded = addedId === playlist.id
                   return (
                     <button key={playlist.id} type="button" onClick={() => choose(playlist)}>

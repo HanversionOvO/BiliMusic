@@ -1,5 +1,5 @@
 import { AnimatePresence, LayoutGroup, motion } from 'framer-motion'
-import { ArrowLeft, ChevronRight, Loader2, Music, Play, Search, Sparkles, UserRound, Users, Video, X } from 'lucide-react'
+import { ArrowLeft, ChevronRight, Clock3, Loader2, Music, Play, Search, Sparkles, Trash2, UserRound, Users, Video, X } from 'lucide-react'
 import { useState, useCallback, useRef, useEffect, type ReactNode } from 'react'
 import { useLocation } from 'react-router-dom'
 import { usePlayer } from '@/contexts/PlayerContext'
@@ -13,10 +13,41 @@ import {
   type UpVideo,
 } from '@/services/api'
 import type { Track } from '@/types'
+import { inferArtistFromTitle } from '@/utils/trackMetadata'
+import { createBiliVideoTrackId } from '@/utils/biliTrack'
 
 type SearchType = 'video' | 'user'
 type SelectedUser = { mid: number; name: string; avatar: string }
-type SearchRouteState = { openArtist?: string }
+type SearchRouteState = { openUploader?: string | { name: string; mid?: string | number } }
+type SearchHistoryEntry = { keyword: string; type: SearchType; searchedAt: number }
+
+const SEARCH_HISTORY_KEY = 'bilimusic_search_history'
+const SEARCH_HISTORY_LIMIT = 12
+
+function loadSearchHistory(): SearchHistoryEntry[] {
+  try {
+    const value = JSON.parse(localStorage.getItem(SEARCH_HISTORY_KEY) || '[]')
+    if (!Array.isArray(value)) return []
+    return value
+      .filter((item): item is SearchHistoryEntry => (
+        item
+        && typeof item.keyword === 'string'
+        && (item.type === 'video' || item.type === 'user')
+        && typeof item.searchedAt === 'number'
+      ))
+      .slice(0, SEARCH_HISTORY_LIMIT)
+  } catch {
+    return []
+  }
+}
+
+function saveSearchHistory(history: SearchHistoryEntry[]): void {
+  try {
+    localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(history.slice(0, SEARCH_HISTORY_LIMIT)))
+  } catch {
+    // Ignore storage quota/privacy mode failures; searching should still work.
+  }
+}
 
 const pageMotion = {
   initial: { opacity: 0, y: 18 },
@@ -78,9 +109,10 @@ function parseDuration(d: string): number {
 
 function searchItemToTrack(item: SearchItem): Track {
   return {
-    id: item.bvid,
+    id: createBiliVideoTrackId(item.bvid),
     title: item.title,
-    artist: item.author,
+    artist: inferArtistFromTitle(item.title),
+    uploaderName: item.author,
     coverUrl: item.pic,
     duration: parseDuration(item.duration),
     videoUrl: `https://www.bilibili.com/video/${item.bvid}`,
@@ -106,10 +138,11 @@ export default function SearchPage() {
   const [loadMoreError, setLoadMoreError] = useState<string | null>(null)
   const [reachedEnd, setReachedEnd] = useState(false)
   const [totalResults, setTotalResults] = useState(0)
+  const [searchHistory, setSearchHistory] = useState<SearchHistoryEntry[]>(loadSearchHistory)
   const pageRef = useRef(1)
   const totalPagesRef = useRef(0)
   const currentQueryRef = useRef('')
-  const consumedOpenArtistRef = useRef('')
+  const consumedOpenUploaderRef = useRef('')
   const pageRootRef = useRef<HTMLDivElement>(null)
   const sentinelRef = useRef<HTMLDivElement>(null)
   const loadingMoreRef = useRef(false)
@@ -129,9 +162,31 @@ export default function SearchPage() {
     currentQueryRef.current = ''
   }, [])
 
+  const rememberSearch = useCallback((keyword: string, type: SearchType) => {
+    setSearchHistory(previous => {
+      const normalized = keyword.trim()
+      const next = [
+        { keyword: normalized, type, searchedAt: Date.now() },
+        ...previous.filter(item => !(item.type === type && item.keyword.toLocaleLowerCase() === normalized.toLocaleLowerCase())),
+      ].slice(0, SEARCH_HISTORY_LIMIT)
+      saveSearchHistory(next)
+      return next
+    })
+  }, [])
+
+  const clearSearchHistory = useCallback(() => {
+    setSearchHistory([])
+    try {
+      localStorage.removeItem(SEARCH_HISTORY_KEY)
+    } catch {
+      // Ignore storage failures.
+    }
+  }, [])
+
   const executeSearch = useCallback(async (keyword: string, type: SearchType) => {
     if (!keyword.trim()) return
     const normalizedKeyword = keyword.trim()
+    rememberSearch(normalizedKeyword, type)
     setLoading(true)
     setError(null)
     setLoadMoreError(null)
@@ -161,7 +216,13 @@ export default function SearchPage() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [rememberSearch])
+
+  const searchFromHistory = useCallback((entry: SearchHistoryEntry) => {
+    setQuery(entry.keyword)
+    setSearchType(entry.type)
+    void executeSearch(entry.keyword, entry.type)
+  }, [executeSearch])
 
   const handleSearch = useCallback(async (typeArg?: SearchType) => {
     const keyword = query.trim()
@@ -183,11 +244,11 @@ export default function SearchPage() {
     }
   }, [searchType, query, executeSearch])
 
-  const openArtistSpace = useCallback(async (artistName: string) => {
-    const normalizedArtist = artistName.trim()
-    if (!normalizedArtist) return
+  const openUploaderSpace = useCallback(async (uploaderName: string, uploaderMid?: string | number) => {
+    const normalizedUploader = uploaderName.trim()
+    if (!normalizedUploader) return
 
-    setQuery(normalizedArtist)
+    setQuery(normalizedUploader)
     setSearchType('user')
     setResultType('user')
     setLoading(true)
@@ -200,12 +261,20 @@ export default function SearchPage() {
     setTotalResults(0)
     pageRef.current = 1
     totalPagesRef.current = 0
-    currentQueryRef.current = normalizedArtist
+    currentQueryRef.current = normalizedUploader
+
+    const resolvedMid = Number(uploaderMid) || 0
+    if (resolvedMid) {
+      setSelectedUser({ mid: resolvedMid, name: normalizedUploader, avatar: '' })
+      setHasSearched(true)
+      setLoading(false)
+      return
+    }
 
     try {
-      const data = await searchUsers(normalizedArtist, 1)
-      const normalizedLower = normalizedArtist.toLowerCase()
-      const best = data.items.find(user => user.name.trim() === normalizedArtist)
+      const data = await searchUsers(normalizedUploader, 1)
+      const normalizedLower = normalizedUploader.toLowerCase()
+      const best = data.items.find(user => user.name.trim() === normalizedUploader)
         || data.items.find(user => user.name.toLowerCase().includes(normalizedLower))
         || data.items[0]
 
@@ -223,11 +292,14 @@ export default function SearchPage() {
   }, [])
 
   useEffect(() => {
-    const artistName = (location.state as SearchRouteState | null)?.openArtist
-    if (!artistName || consumedOpenArtistRef.current === artistName) return
-    consumedOpenArtistRef.current = artistName
-    openArtistSpace(artistName)
-  }, [location.state, openArtistSpace])
+    const uploader = (location.state as SearchRouteState | null)?.openUploader
+    const uploaderName = typeof uploader === 'string' ? uploader : uploader?.name
+    const uploaderMid = typeof uploader === 'object' ? uploader.mid : undefined
+    const identity = `${uploaderMid || ''}:${uploaderName || ''}`
+    if (!uploaderName || consumedOpenUploaderRef.current === identity) return
+    consumedOpenUploaderRef.current = identity
+    openUploaderSpace(uploaderName, uploaderMid)
+  }, [location.state, openUploaderSpace])
 
   const loadMore = useCallback(async () => {
     const loadedCount = resultType === 'video' ? results.length : userResults.length
@@ -431,7 +503,7 @@ export default function SearchPage() {
                   <BiliVideoRow
                     key={result.bvid || result.aid}
                     track={searchItemToTrack(result)}
-                    subtitle={`${result.author} · ${formatCount(result.play)}播放`}
+                    subtitle={`UP：${result.author} · ${formatCount(result.play)}播放`}
                     durationText={result.duration}
                     resolvePartsOnPlay
                   />
@@ -470,7 +542,13 @@ export default function SearchPage() {
           </motion.section>
         ) : (
           <motion.div key="empty" initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} transition={{ duration: 0.3 }}>
-            <EmptySearchMode searchType={searchType} onSearch={(keyword) => { setQuery(keyword); executeSearch(keyword, searchType) }} />
+            <EmptySearchMode
+              searchType={searchType}
+              history={searchHistory}
+              onClearHistory={clearSearchHistory}
+              onHistorySearch={searchFromHistory}
+              onSearch={(keyword) => { setQuery(keyword); executeSearch(keyword, searchType) }}
+            />
           </motion.div>
         )}
       </AnimatePresence>
@@ -592,16 +670,18 @@ function UserSpaceView({ user, onBack }: { user: SelectedUser; onBack: () => voi
   }, [loadMore, videos.length])
 
   const toTrack = useCallback((v: UpVideo): Track => ({
-    id: v.bvid,
+    id: createBiliVideoTrackId(v.bvid),
     title: v.title,
-    artist: user.name,
+    artist: inferArtistFromTitle(v.title),
+    uploaderName: user.name,
+    uploaderMid: user.mid,
     coverUrl: v.coverUrl,
     duration: v.duration,
     videoUrl: `https://www.bilibili.com/video/${v.bvid}`,
     bvid: v.bvid,
     playCount: v.play,
     isLiked: false,
-  }), [user.name])
+  }), [user.mid, user.name])
 
   const playAll = useCallback(() => {
     if (videos.length === 0) return
@@ -647,7 +727,7 @@ function UserSpaceView({ user, onBack }: { user: SelectedUser; onBack: () => voi
               <BiliVideoRow
                 key={video.bvid}
                 track={toTrack(video)}
-                subtitle={`${formatCount(video.play)}播放`}
+                subtitle={`UP：${user.name} · ${formatCount(video.play)}播放`}
                 durationText={formatDuration(video.duration)}
                 resolvePartsOnPlay
               />
@@ -669,13 +749,40 @@ function UserSpaceView({ user, onBack }: { user: SelectedUser; onBack: () => voi
   )
 }
 
-function EmptySearchMode({ searchType, onSearch }: { searchType: SearchType; onSearch: (keyword: string) => void }) {
+function EmptySearchMode({ searchType, history, onSearch, onHistorySearch, onClearHistory }: {
+  searchType: SearchType
+  history: SearchHistoryEntry[]
+  onSearch: (keyword: string) => void
+  onHistorySearch: (entry: SearchHistoryEntry) => void
+  onClearHistory: () => void
+}) {
   const suggestions = searchType === 'video'
     ? ['周杰伦', '新歌', 'Lo-fi', 'Live']
     : ['音乐区官方', '钢琴', '翻唱', '电音']
 
   return (
     <section className="apple-search-empty">
+      {history.length > 0 && (
+        <div className="apple-search-history">
+          <div className="apple-search-history__header">
+            <span><Clock3 size={15} />搜索历史</span>
+            <button type="button" onClick={onClearHistory}><Trash2 size={14} />清除</button>
+          </div>
+          <div className="apple-search-history__items">
+            {history.map(entry => (
+              <button
+                key={`${entry.type}:${entry.keyword.toLocaleLowerCase()}`}
+                type="button"
+                onClick={() => onHistorySearch(entry)}
+                title={`搜索${entry.type === 'video' ? '视频' : 'UP 主'}：${entry.keyword}`}
+              >
+                <span>{entry.keyword}</span>
+                <small>{entry.type === 'video' ? '视频' : 'UP主'}</small>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       <motion.div
         className="apple-search-empty__icon"
         animate={{ y: [0, -7, 0], rotate: [0, -3, 0] }}

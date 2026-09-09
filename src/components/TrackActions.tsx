@@ -2,6 +2,7 @@ import { ListStart, Plus, Check } from 'lucide-react'
 import { usePlayer } from '@/contexts/PlayerContext'
 import AddToPlaylistButton from '@/components/AddToPlaylistButton'
 import type { Track } from '@/types'
+import { isSameTrack } from '@/utils/trackIdentity'
 
 /**
  * 歌曲行内操作：下一首播放 / 加入播放列表
@@ -11,12 +12,13 @@ import type { Track } from '@/types'
  */
 export default function TrackActions({ track, size = 16 }: { track: Track; size?: number }) {
   const player = usePlayer()
-  const queued = player.queue.some(t => t.id === track.id)
+  const queued = player.queue.some(t => isSameTrack(t, track))
 
   return (
     <div
       style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}
       onClick={(e) => e.stopPropagation()}
+      onPointerDown={(e) => e.stopPropagation()}
     >
       <ActionButton
         title="下一首播放"

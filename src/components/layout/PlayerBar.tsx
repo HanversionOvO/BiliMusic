@@ -1,4 +1,4 @@
-import { useState, type CSSProperties, type ReactNode } from 'react'
+import { useCallback, useState, type CSSProperties, type ReactNode } from 'react'
 import { motion } from 'framer-motion'
 import {
   Play,
@@ -21,6 +21,7 @@ import { useNowPlaying } from '@/contexts/NowPlayingContext'
 import { useAddToPlaylist } from '@/contexts/AddToPlaylistContext'
 import PlayQueue from '@/components/PlayQueue'
 import PlayerSlider from '@/components/PlayerSlider'
+import { trackArtistLabel } from '@/utils/trackMetadata'
 
 const spring = {
   type: 'spring',
@@ -41,6 +42,7 @@ export default function PlayerBar() {
   const { open } = useNowPlaying()
   const { openAddToPlaylist } = useAddToPlaylist()
   const [queueOpen, setQueueOpen] = useState(false)
+  const closeQueue = useCallback(() => setQueueOpen(false), [])
   const trackDuration = duration || player.currentTrack?.duration || 0
   const remaining = Math.max(trackDuration - progress, 0)
 
@@ -193,7 +195,9 @@ export default function PlayerBar() {
                     whiteSpace: 'nowrap',
                   }}
                 >
-                  {player.currentTrack.artist}
+                  {[trackArtistLabel(player.currentTrack), player.currentTrack.album?.trim()]
+                    .filter(Boolean)
+                    .join(' · ')}
                 </motion.div>
               </>
             ) : (
@@ -404,7 +408,7 @@ export default function PlayerBar() {
         </div>
       </div>
 
-      <PlayQueue open={queueOpen} onClose={() => setQueueOpen(false)} />
+      <PlayQueue open={queueOpen} onClose={closeQueue} />
     </motion.div>
   )
 }

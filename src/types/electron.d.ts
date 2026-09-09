@@ -13,6 +13,8 @@ interface BiliApi {
     cid: number
     title: string
     artist: string
+    uploaderName?: string
+    uploaderMid?: string | number
     coverUrl: string
     duration: number
     audioUrl: string

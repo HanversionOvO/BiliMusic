@@ -14,6 +14,7 @@ import PlayerSlider from '@/components/PlayerSlider'
 import LyricsView from '@/components/LyricsView'
 import type { LyricCandidate, LyricLine } from '@/services/lyrics'
 import { getVideoCommentReplies, getVideoComments, likeVideoComment, replyToVideoComment, type VideoComment } from '@/services/api'
+import { trackArtistLabel } from '@/utils/trackMetadata'
 
 const sliderTheme = {
   ['--track-bg']: 'rgba(255,255,255,0.18)',
@@ -80,10 +81,17 @@ export default function NowPlaying() {
     window.electronAPI?.close()
   }
 
-  const openArtistSpace = () => {
-    if (!track?.artist.trim()) return
+  const openUploaderSpace = () => {
+    if (!track?.uploaderName?.trim()) return
     close()
-    navigate('/search', { state: { openArtist: track.artist } })
+    navigate('/search', {
+      state: {
+        openUploader: {
+          name: track.uploaderName,
+          mid: track.uploaderMid,
+        },
+      },
+    })
   }
 
   const openSourceVideo = () => {
@@ -255,14 +263,17 @@ export default function NowPlaying() {
               <div className="now-playing-meta">
                 <div className="now-playing-title-block">
                   <h1>{track.title}</h1>
-                  <motion.button
-                    type="button"
-                    className="now-playing-artist-link"
-                    onClick={openArtistSpace}
-                    title={`查看 ${track.artist} 的个人空间`}
-                  >
-                    {track.artist}
-                  </motion.button>
+                  <p className="now-playing-artist">{trackArtistLabel(track)}</p>
+                  {track.uploaderName && (
+                    <motion.button
+                      type="button"
+                      className="now-playing-artist-link"
+                      onClick={openUploaderSpace}
+                      title={`查看 UP 主 ${track.uploaderName} 的个人空间`}
+                    >
+                      UP 主 · {track.uploaderName}
+                    </motion.button>
+                  )}
                 </div>
                 <motion.button
                   type="button"

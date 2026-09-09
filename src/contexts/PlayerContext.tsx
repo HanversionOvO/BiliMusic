@@ -1,8 +1,10 @@
 import { createContext, useContext, useState, useCallback, useMemo, useRef, useEffect, type ReactNode } from 'react'
 import type { Track, RepeatMode } from '@/types'
 import { extractAudio } from '@/services/api'
-import { addRecentTrack, toggleFavoriteTrack, loadFavoriteTracks } from '@/utils/storage'
+import { addRecentTrack, toggleFavoriteTrack, loadFavoriteTracks, normalizeStoredTrack, FAVORITES_CHANGED_EVENT } from '@/utils/storage'
 import { useAppSettings } from '@/hooks/useAppSettings'
+import { trackArtistLabel, trackCreditLine } from '@/utils/trackMetadata'
+import { includesTrack, isSameTrack, uniqueTracks, withTrackIdentity } from '@/utils/trackIdentity'
 
 interface PlayerState {
   currentTrack: Track | null
@@ -64,6 +66,29 @@ const PlayerContext = createContext<PlayerContext | null>(null)
 const PlayerProgressContext = createContext<PlayerProgress | null>(null)
 const PLAYER_STATE_KEY = 'bilimusic_player_state'
 
+function syncTrackFavoriteState(track: Track, favorites = loadFavoriteTracks()): Track {
+  const normalized = withTrackIdentity(track)
+  const favorite = favorites.find(item => isSameTrack(item, normalized))
+  if (!favorite) return { ...normalized, isLiked: false }
+
+  const metadata = favorite.metadataUpdatedAt ? {
+    title: favorite.title,
+    artist: favorite.artist,
+    album: favorite.album,
+    coverUrl: favorite.coverUrl,
+    metadataUpdatedAt: favorite.metadataUpdatedAt,
+  } : {}
+
+  return {
+    ...normalized,
+    ...metadata,
+    uploaderName: normalized.uploaderName || favorite.uploaderName,
+    uploaderMid: normalized.uploaderMid || favorite.uploaderMid,
+    isLiked: true,
+    likedAt: favorite.likedAt,
+  }
+}
+
 function loadPersistedPlayerState(): PersistedPlayerState {
   const fallbackVolume = localStorage.getItem('bilimusic_volume')
   const fallback: PersistedPlayerState = {
@@ -83,11 +108,14 @@ function loadPersistedPlayerState(): PersistedPlayerState {
     const raw = localStorage.getItem(PLAYER_STATE_KEY)
     if (!raw) return fallback
     const parsed = JSON.parse(raw) as Partial<PersistedPlayerState>
-    const queue = Array.isArray(parsed.queue) ? parsed.queue : []
+    const favorites = loadFavoriteTracks()
+    const queue = Array.isArray(parsed.queue)
+      ? uniqueTracks(parsed.queue.map(normalizeStoredTrack)).map(track => syncTrackFavoriteState(track, favorites))
+      : []
     return {
       ...fallback,
       ...parsed,
-      currentTrack: parsed.currentTrack || null,
+      currentTrack: parsed.currentTrack ? syncTrackFavoriteState(normalizeStoredTrack(parsed.currentTrack), favorites) : null,
       queue,
       progress: Math.max(0, Number(parsed.progress || 0)),
       duration: Math.max(0, Number(parsed.duration || 0)),
@@ -284,17 +312,22 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         }
         setDuration(source.duration || audio.duration || 0)
 
-        // 更新封面（提取到的可能更高清）
-        if (source.coverUrl && !currentTrack!.metadataUpdatedAt) {
-          setCurrentTrack(prev => prev ? { ...prev, coverUrl: source.coverUrl } : null)
-        }
-        // 记录最近播放
-        addRecentTrack({
+        const resolvedTrack: Track = withTrackIdentity({
           ...currentTrack!,
+          aid: source.aid || currentTrack!.aid,
+          cid: source.cid || currentTrack!.cid,
+          artist: currentTrack!.metadataUpdatedAt
+            ? currentTrack!.artist
+            : (currentTrack!.artist || source.artist || ''),
+          uploaderName: currentTrack!.uploaderName || source.uploaderName,
+          uploaderMid: currentTrack!.uploaderMid || source.uploaderMid,
           coverUrl: currentTrack!.metadataUpdatedAt
             ? currentTrack!.coverUrl
             : (source.coverUrl || currentTrack!.coverUrl),
         })
+        setCurrentTrack(prev => prev ? { ...prev, ...resolvedTrack } : null)
+        // 记录最近播放
+        addRecentTrack(resolvedTrack)
       } catch {
         if (!cancelled) {
           // 降级：直接用原始信息触发 play（无音频源，标记为不可播放）
@@ -307,7 +340,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
     loadAndPlay()
     return () => { cancelled = true }
-  }, [currentTrack?.id, currentTrack?.bvid, currentTrack?.cid, currentTrack?.page])
+  }, [currentTrack?.id])
 
   // ended 事件
   useEffect(() => {
@@ -318,11 +351,12 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }, [handleTrackEnd])
 
   const play = useCallback((track: Track) => {
+    const nextTrack = syncTrackFavoriteState(track)
     shouldAutoplayRef.current = true
-    setCurrentTrack(track)
+    setCurrentTrack(nextTrack)
     setProgress(0)
     const displayQueue = isShuffled ? shuffledQueueRef.current : queue
-    const idx = displayQueue.findIndex(t => t.id === track.id)
+    const idx = displayQueue.findIndex(t => isSameTrack(t, nextTrack))
     currentIndexRef.current = idx >= 0 ? idx : 0
   }, [isShuffled, queue])
 
@@ -380,13 +414,14 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const addToQueue = useCallback((track: Track) => {
-    const exists = queue.some(t => t.id === track.id)
+    const nextTrack = syncTrackFavoriteState(track)
+    const exists = queue.some(t => isSameTrack(t, nextTrack))
     setQueue(prev => {
-      if (prev.some(t => t.id === track.id)) return prev
-      const newQueue = [...prev, track]
+      if (prev.some(t => isSameTrack(t, nextTrack))) return prev
+      const newQueue = [...prev, nextTrack]
       if (!currentTrack) {
         shouldAutoplayRef.current = true
-        setCurrentTrack(track)
+        setCurrentTrack(nextTrack)
         currentIndexRef.current = 0
       }
       return newQueue
@@ -396,8 +431,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   const addTracksToQueue = useCallback((tracks: Track[]) => {
     setQueue(prev => {
-      const existingIds = new Set(prev.map(t => t.id))
-      const newTracks = tracks.filter(t => !existingIds.has(t.id))
+      const favorites = loadFavoriteTracks()
+      const newTracks = uniqueTracks(tracks)
+        .filter(track => !prev.some(item => isSameTrack(item, track)))
+        .map(track => syncTrackFavoriteState(track, favorites))
       const newQueue = [...prev, ...newTracks]
       if (!currentTrack && newQueue.length > 0) {
         shouldAutoplayRef.current = true
@@ -410,8 +447,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   // 队列变更后把 currentIndexRef 重新对齐到当前曲目（避免 next/prev 错位）
   const resyncIndex = useCallback((nextQueue: Track[]) => {
-    const curId = currentTrack?.id
-    if (curId) currentIndexRef.current = nextQueue.findIndex(t => t.id === curId)
+    if (currentTrack) currentIndexRef.current = nextQueue.findIndex(t => isSameTrack(t, currentTrack))
   }, [currentTrack])
 
   const removeFromQueue = useCallback((trackId: string) => {
@@ -449,16 +485,17 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   // 立即播放：把曲目置于队列首位并播放（点击歌曲的默认行为）
   const playNow = useCallback((track: Track) => {
+    const nextTrack = syncTrackFavoriteState(track)
     shouldAutoplayRef.current = true
-    setQueue(prev => [track, ...prev.filter(t => t.id !== track.id)])
+    setQueue(prev => [nextTrack, ...prev.filter(t => !isSameTrack(t, nextTrack))])
 
     // setCurrentTrack with the same track id does not retrigger the audio-loading
     // effect. Drive the existing audio element directly so a restored/paused
     // current track starts on the first click instead of only changing the UI.
-    if (currentTrack?.id === track.id && audioRef.current?.src) {
+    if (isSameTrack(currentTrack, nextTrack) && audioRef.current?.src) {
       const audio = audioRef.current
       audio.currentTime = 0
-      setCurrentTrack(track)
+      setCurrentTrack(nextTrack)
       setProgress(0)
       currentIndexRef.current = 0
       audio.play()
@@ -467,7 +504,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       return
     }
 
-    setCurrentTrack(track)
+    setCurrentTrack(nextTrack)
     setProgress(0)
     currentIndexRef.current = 0
     setIsPlaying(true)
@@ -476,11 +513,12 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   // 下一首播放：把曲目插入到当前曲目之后（不在队列则新增；无播放则等同立即播放）
   const playNext = useCallback((track: Track) => {
     if (!currentTrack) { playNow(track); return }
+    const nextTrack = syncTrackFavoriteState(track)
     setQueue(prev => {
-      const without = prev.filter(t => t.id !== track.id)
-      const curIdx = without.findIndex(t => t.id === currentTrack.id)
+      const without = prev.filter(t => !isSameTrack(t, nextTrack))
+      const curIdx = without.findIndex(t => isSameTrack(t, currentTrack))
       const insertAt = curIdx >= 0 ? curIdx + 1 : without.length
-      const next = [...without.slice(0, insertAt), track, ...without.slice(insertAt)]
+      const next = [...without.slice(0, insertAt), nextTrack, ...without.slice(insertAt)]
       resyncIndex(next)
       return next
     })
@@ -499,19 +537,33 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const toggleLike = useCallback((trackId: string) => {
-    const track = queue.find(t => t.id === trackId) || currentTrack
-    if (track) {
-      toggleFavoriteTrack(track)
-    }
-    setCurrentTrack(prev => prev && prev.id === trackId ? { ...prev, isLiked: !prev.isLiked } : prev)
-    setQueue(prev => prev.map(t => t.id === trackId ? { ...t, isLiked: !t.isLiked } : t))
+    const track = queue.find(t => t.id === trackId)
+      || (currentTrack?.id === trackId ? currentTrack : null)
+    if (!track) return
+    const favorites = toggleFavoriteTrack(track)
+    const isLiked = includesTrack(favorites, track)
+    setCurrentTrack(prev => isSameTrack(prev, track) ? { ...prev!, isLiked } : prev)
+    setQueue(prev => prev.map(item => isSameTrack(item, track) ? { ...item, isLiked } : item))
   }, [queue, currentTrack])
+
+  useEffect(() => {
+    const syncFavorites = () => {
+      const favorites = loadFavoriteTracks()
+      setCurrentTrack(track => track ? syncTrackFavoriteState(track, favorites) : null)
+      setQueue(tracks => tracks.map(track => syncTrackFavoriteState(track, favorites)))
+    }
+    window.addEventListener(FAVORITES_CHANGED_EVENT, syncFavorites)
+    window.addEventListener('storage', syncFavorites)
+    return () => {
+      window.removeEventListener(FAVORITES_CHANGED_EVENT, syncFavorites)
+      window.removeEventListener('storage', syncFavorites)
+    }
+  }, [])
 
   const playAll = useCallback((tracks: Track[]) => {
     if (tracks.length === 0) return
     const favs = loadFavoriteTracks()
-    const favIds = new Set(favs.map(t => t.id))
-    const synced = tracks.map(t => ({ ...t, isLiked: favIds.has(t.id) }))
+    const synced = uniqueTracks(tracks).map(track => syncTrackFavoriteState(track, favs))
     setQueue(synced)
     shouldAutoplayRef.current = true
     setCurrentTrack(synced[0])
@@ -531,8 +583,9 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }, [isShuffled, queue])
 
   const updateTrackMetadata = useCallback((track: Track) => {
-    setCurrentTrack(current => current?.id === track.id ? { ...current, ...track } : current)
-    setQueue(current => current.map(item => item.id === track.id ? { ...item, ...track } : item))
+    const normalized = withTrackIdentity(track)
+    setCurrentTrack(current => isSameTrack(current, normalized) ? { ...current!, ...normalized } : current)
+    setQueue(current => current.map(item => isSameTrack(item, normalized) ? { ...item, ...normalized } : item))
   }, [])
 
   // 更新 shuffledQueueRef
@@ -546,7 +599,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       return
     }
     const displayQueue = isShuffled ? shuffledQueueRef.current : queue
-    const index = displayQueue.findIndex(track => track.id === currentTrack.id)
+    const index = displayQueue.findIndex(track => isSameTrack(track, currentTrack))
     currentIndexRef.current = index >= 0 ? index : 0
   }, [currentTrack?.id, isShuffled, queue])
 
@@ -574,7 +627,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     const pushTrayState = () => window.electronAPI?.updateTrayPlayerState?.({
       hasTrack: Boolean(currentTrack),
       title: currentTrack?.title || '未在播放',
-      artist: currentTrack?.artist || '搜索并播放音乐',
+      artist: currentTrack ? trackCreditLine(currentTrack) : '搜索并播放音乐',
       coverUrl: currentTrack?.coverUrl || '',
       isPlaying,
       queueLength: queue.length,
@@ -585,7 +638,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     const observer = new MutationObserver(pushTrayState)
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
     return () => observer.disconnect()
-  }, [currentTrack?.artist, currentTrack?.coverUrl, currentTrack?.id, currentTrack?.title, isPlaying, queue.length])
+  }, [currentTrack?.album, currentTrack?.artist, currentTrack?.coverUrl, currentTrack?.id, currentTrack?.title, currentTrack?.uploaderName, isPlaying, queue.length])
 
   useEffect(() => {
     return window.electronAPI?.onTrayPlayerCommand?.((command) => {
@@ -659,7 +712,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
     navigator.mediaSession.metadata = new MediaMetadata({
       title: currentTrack.title || '未命名歌曲',
-      artist: currentTrack.artist || 'BiliMusic',
+      artist: trackArtistLabel(currentTrack),
       album: 'BiliMusic',
       artwork,
     })

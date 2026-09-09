@@ -1,5 +1,6 @@
 import type { AppSettings, Playlist, Tombstone, Track } from '@/types'
 import { readStoredItem, writeStoredItem } from '@/utils/persistentStorage'
+import { isSameTrack, uniqueTracks, withTrackIdentity } from '@/utils/trackIdentity'
 
 const RECENT_KEY = 'bilimusic_recent'
 const FAVORITES_KEY = 'bilimusic_favorites'
@@ -24,48 +25,54 @@ function notifySettingsChanged() {
   window.dispatchEvent(new CustomEvent(SETTINGS_CHANGED_EVENT))
 }
 
+export function normalizeStoredTrack(track: Track): Track {
+  return withTrackIdentity(track)
+}
+
 export function loadRecentTracks(): Track[] {
   try {
     const raw = localStorage.getItem(RECENT_KEY)
-    return raw ? JSON.parse(raw) : []
+    return raw ? uniqueTracks((JSON.parse(raw) as Track[]).map(normalizeStoredTrack)) : []
   } catch { return [] }
 }
 
 export function saveRecentTracks(tracks: Track[]) {
   try {
-    localStorage.setItem(RECENT_KEY, JSON.stringify(tracks.slice(0, 50)))
+    localStorage.setItem(RECENT_KEY, JSON.stringify(uniqueTracks(tracks).slice(0, 50)))
   } catch { /* ignore */ }
 }
 
 export function addRecentTrack(track: Track) {
-  const recent = loadRecentTracks().filter(t => t.id !== track.id)
-  recent.unshift({ ...track, isLiked: track.isLiked })
+  const normalized = withTrackIdentity(track)
+  const recent = loadRecentTracks().filter(t => !isSameTrack(t, normalized))
+  recent.unshift({ ...normalized, isLiked: normalized.isLiked })
   saveRecentTracks(recent)
 }
 
 export function loadFavoriteTracks(): Track[] {
   try {
     const raw = localStorage.getItem(FAVORITES_KEY)
-    return raw ? JSON.parse(raw) : []
+    return raw ? uniqueTracks((JSON.parse(raw) as Track[]).map(normalizeStoredTrack)) : []
   } catch { return [] }
 }
 
 export function saveFavoriteTracks(tracks: Track[]) {
   try {
-    localStorage.setItem(FAVORITES_KEY, JSON.stringify(tracks))
+    localStorage.setItem(FAVORITES_KEY, JSON.stringify(uniqueTracks(tracks)))
     window.dispatchEvent(new CustomEvent(FAVORITES_CHANGED_EVENT))
   } catch { /* ignore */ }
 }
 
 export function toggleFavoriteTrack(track: Track): Track[] {
   const favs = loadFavoriteTracks()
-  const idx = favs.findIndex(t => t.id === track.id)
+  const normalized = withTrackIdentity(track)
+  const idx = favs.findIndex(t => isSameTrack(t, normalized))
   if (idx >= 0) {
-    favs.splice(idx, 1)
-    addTombstone(FAVORITE_TOMBSTONES_KEY, track.id) // 取消收藏 → 记墓碑
+    const [removed] = favs.splice(idx, 1)
+    addTombstone(FAVORITE_TOMBSTONES_KEY, removed.id) // 取消收藏 → 记墓碑
   } else {
-    favs.unshift({ ...track, isLiked: true, likedAt: new Date().toISOString() })
-    removeTombstone(FAVORITE_TOMBSTONES_KEY, track.id) // 重新收藏 → 清墓碑
+    favs.unshift({ ...normalized, isLiked: true, likedAt: new Date().toISOString() })
+    removeTombstone(FAVORITE_TOMBSTONES_KEY, normalized.id) // 重新收藏 → 清墓碑
   }
   saveFavoriteTracks(favs)
   return favs
@@ -151,7 +158,12 @@ export function saveFavoriteTombstones(list: Tombstone[]): void {
 export function loadPlaylists(): Playlist[] {
   try {
     const raw = localStorage.getItem(PLAYLISTS_KEY)
-    return raw ? JSON.parse(raw) : []
+    return raw
+      ? (JSON.parse(raw) as Playlist[]).map((playlist) => ({
+          ...playlist,
+          tracks: uniqueTracks(playlist.tracks.map(normalizeStoredTrack)),
+        }))
+      : []
   } catch {
     return []
   }
@@ -159,7 +171,11 @@ export function loadPlaylists(): Playlist[] {
 
 export function savePlaylists(playlists: Playlist[]) {
   try {
-    localStorage.setItem(PLAYLISTS_KEY, JSON.stringify(playlists))
+    const normalized = playlists.map(playlist => ({
+      ...playlist,
+      tracks: uniqueTracks(playlist.tracks),
+    }))
+    localStorage.setItem(PLAYLISTS_KEY, JSON.stringify(normalized))
     notifyPlaylistsChanged()
   } catch {
     // ignore
@@ -204,8 +220,8 @@ export function addTracksToPlaylist(playlistId: string, tracks: Track[]): Playli
   let updatedPlaylist: Playlist | null = null
   const updated = playlists.map((playlist) => {
     if (playlist.id !== playlistId) return playlist
-    const existingIds = new Set(playlist.tracks.map(t => t.id))
-    const additions = tracks.filter(track => !existingIds.has(track.id))
+    const additions = uniqueTracks(tracks)
+      .filter(track => !playlist.tracks.some(item => isSameTrack(item, track)))
     updatedPlaylist = {
       ...playlist,
       coverUrl: playlist.coverUrl || tracks[0]?.coverUrl || '',

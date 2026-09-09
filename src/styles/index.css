@@ -156,6 +156,11 @@
   --queue-selbox-border: rgba(255, 255, 255, 0.36);
 }
 
+.play-queue-row-shell {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 58px;
+}
+
 /* ===== Dark Theme ===== */
 
 [data-theme="dark"] {
@@ -1354,6 +1359,19 @@ body {
 
 .bili-video-group > .apple-search-row {
   border-bottom: 0;
+  cursor: default;
+}
+
+.bili-video-group .apple-search-cover,
+.bili-video-group .apple-search-row__main {
+  cursor: pointer;
+  outline: none;
+}
+
+.bili-video-group .apple-search-cover:focus-visible,
+.bili-video-group .apple-search-row__main:focus-visible,
+.bili-part-title:focus-visible {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 55%, transparent);
 }
 
 .bili-parts-toggle {
@@ -1440,7 +1458,7 @@ body {
   min-height: 43px;
   padding: 5px 10px;
   border-bottom: 1px solid rgba(148, 153, 160, 0.1);
-  cursor: pointer;
+  cursor: default;
   transition: background var(--duration-fast);
 }
 
@@ -1470,6 +1488,9 @@ body {
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
+  cursor: pointer;
+  border-radius: 6px;
+  outline: none;
 }
 
 .bili-part-row.is-current .bili-part-title {
@@ -1663,6 +1684,88 @@ body {
   cursor: pointer;
   font: 700 13px/1 var(--font-body);
   box-shadow: var(--shadow-sm);
+}
+
+.apple-search-history {
+  width: min(100%, 680px);
+  padding: 16px 18px 18px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  background: var(--glass-bg);
+  box-shadow: var(--shadow-sm);
+}
+
+.apple-search-history__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.apple-search-history__header span,
+.apple-search-history__header button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.apple-search-history__header span {
+  color: var(--color-muted-foreground);
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.apple-search-history__header button {
+  border: 0;
+  background: transparent;
+  color: var(--color-muted);
+  cursor: pointer;
+  font: 650 12px/1 var(--font-body);
+}
+
+.apple-search-history__header button:hover {
+  color: var(--color-primary);
+}
+
+.apple-search-history__items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.apple-search-history__items button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 100%;
+  min-height: 34px;
+  padding: 0 11px 0 13px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: var(--color-card);
+  color: var(--color-foreground);
+  cursor: pointer;
+  font: 650 13px/1 var(--font-body);
+  transition: border-color var(--duration-fast), color var(--duration-fast), transform var(--duration-fast);
+}
+
+.apple-search-history__items button:hover {
+  color: var(--color-primary);
+  border-color: rgba(251, 114, 153, 0.4);
+  transform: translateY(-1px);
+}
+
+.apple-search-history__items span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.apple-search-history__items small {
+  flex: 0 0 auto;
+  color: var(--color-muted);
+  font-size: 10px;
+  font-weight: 700;
 }
 
 .apple-search-more,
@@ -2180,6 +2283,11 @@ body {
   text-align: left;
   font-family: inherit;
   transition: color var(--duration-fast) ease, transform var(--duration-fast) ease;
+}
+
+.now-playing-artist + .now-playing-artist-link {
+  margin-top: 4px;
+  font-size: 13px;
 }
 
 .now-playing-artist-link:hover {
@@ -3579,7 +3687,7 @@ button.now-playing-comment-feedback.is-error {
   gap: 14px;
   padding: 9px 14px;
   border-bottom: 1px solid rgba(148, 153, 160, 0.13);
-  cursor: pointer;
+  cursor: default;
 }
 
 .am-track-row:last-child {
@@ -3641,6 +3749,7 @@ button.now-playing-comment-feedback.is-error {
   background: var(--color-border);
   flex: 0 0 auto;
   box-shadow: 0 7px 16px rgba(24, 25, 28, 0.08);
+  cursor: pointer;
 }
 
 .am-track-row__cover img {
@@ -3672,6 +3781,14 @@ button.now-playing-comment-feedback.is-error {
 .am-track-row__main {
   flex: 1;
   min-width: 0;
+  cursor: pointer;
+  border-radius: 8px;
+  outline: none;
+}
+
+.am-track-row__cover:focus-visible,
+.am-track-row__main:focus-visible {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 55%, transparent);
 }
 
 .am-track-row__main h3 {

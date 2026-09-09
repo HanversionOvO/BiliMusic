@@ -2,9 +2,9 @@ import { useEffect, useState, useCallback } from 'react'
 import { Disc3, Loader2, Play, RefreshCw, TrendingUp } from 'lucide-react'
 import { usePlayer } from '@/contexts/PlayerContext'
 import { getMusicRanking, type VideoInfo } from '@/services/api'
-import type { Track } from '@/types'
 import BiliVideoRow from '@/components/BiliVideoRow'
-import { createBiliTrackId } from '@/utils/biliTrack'
+import { videoInfoToTrack } from '@/utils/biliTrack'
+import { isSameTrack } from '@/utils/trackIdentity'
 import {
   ActionButton,
   EmptyLibrary,
@@ -15,22 +15,7 @@ import {
   MusicSection,
 } from '@/components/AppleMusicPage'
 
-function videoToTrack(video: VideoInfo): Track {
-  return {
-    id: createBiliTrackId(video.bvid, video.cid),
-    title: video.title,
-    artist: video.ownerName,
-    coverUrl: video.pic,
-    duration: video.duration,
-    videoUrl: `https://www.bilibili.com/video/${video.bvid}`,
-    bvid: video.bvid,
-    aid: video.aid,
-    cid: video.cid || undefined,
-    sourceType: 'video',
-    playCount: video.stat?.view || 0,
-    isLiked: false,
-  }
-}
+const videoToTrack = videoInfoToTrack
 
 export default function Discover() {
   const [tracks, setTracks] = useState<VideoInfo[]>([])
@@ -103,7 +88,7 @@ export default function Discover() {
                     key={video.bvid}
                     track={track}
                     index={index + 1}
-                    isCurrent={player.currentTrack?.id === track.id}
+                    isCurrent={isSameTrack(player.currentTrack, track)}
                     onPlay={() => handlePlayOne(video)}
                   />
                 )
@@ -119,7 +104,7 @@ export default function Discover() {
                   <BiliVideoRow
                     key={video.bvid}
                     track={track}
-                    subtitle={`排行榜第 ${featured.length + index + 1} 名 · ${video.stat?.view || 0} 播放`}
+                    subtitle={`UP：${video.ownerName} · 排行榜第 ${featured.length + index + 1} 名 · ${video.stat?.view || 0} 播放`}
                     durationText={`${Math.floor(video.duration / 60)}:${String(video.duration % 60).padStart(2, '0')}`}
                   />
                 )

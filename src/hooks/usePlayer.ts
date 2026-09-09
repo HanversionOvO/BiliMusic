@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react'
 import type { Track, RepeatMode } from '@/types'
+import { isSameTrack, withTrackIdentity } from '@/utils/trackIdentity'
 
 export function usePlayer() {
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null)
@@ -12,7 +13,7 @@ export function usePlayer() {
   const [queue, setQueue] = useState<Track[]>([])
 
   const play = useCallback((track: Track) => {
-    setCurrentTrack(track)
+    setCurrentTrack(withTrackIdentity(track))
     setIsPlaying(true)
   }, [])
 
@@ -27,7 +28,7 @@ export function usePlayer() {
 
   const next = useCallback(() => {
     if (queue.length === 0) return
-    const idx = queue.findIndex(t => t.id === currentTrack?.id)
+    const idx = queue.findIndex(t => isSameTrack(t, currentTrack))
     const nextIdx = idx + 1 < queue.length ? idx + 1 : 0
     setCurrentTrack(queue[nextIdx])
     setIsPlaying(true)
@@ -35,14 +36,15 @@ export function usePlayer() {
 
   const prev = useCallback(() => {
     if (queue.length === 0) return
-    const idx = queue.findIndex(t => t.id === currentTrack?.id)
+    const idx = queue.findIndex(t => isSameTrack(t, currentTrack))
     const prevIdx = idx - 1 >= 0 ? idx - 1 : queue.length - 1
     setCurrentTrack(queue[prevIdx])
     setIsPlaying(true)
   }, [currentTrack, queue])
 
   const addToQueue = useCallback((track: Track) => {
-    setQueue(prev => [...prev, track])
+    const normalized = withTrackIdentity(track)
+    setQueue(prev => prev.some(item => isSameTrack(item, normalized)) ? prev : [...prev, normalized])
   }, [])
 
   const removeFromQueue = useCallback((trackId: string) => {
