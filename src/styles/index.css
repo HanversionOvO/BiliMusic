@@ -2154,6 +2154,65 @@ body {
   transform: translate3d(0, -4px, 0) scale(1.012);
 }
 
+.lyrics-panel__toolbar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  min-height: 34px;
+  margin-bottom: 8px;
+}
+
+.lyrics-source-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.lyrics-source-select {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: rgba(255, 255, 255, 0.52);
+  transition: border-color 160ms ease, background-color 160ms ease, color 160ms ease;
+}
+
+.lyrics-source-select:hover,
+.lyrics-source-select:focus-within {
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.045);
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.lyrics-source-select select {
+  height: 28px;
+  max-width: 170px;
+  padding: 0 22px 0 9px;
+  border: 0;
+  border-radius: inherit;
+  appearance: none;
+  background: transparent;
+  color: inherit;
+  outline: 0;
+  font: 650 12px/1 var(--font-body);
+  cursor: pointer;
+}
+
+.lyrics-source-select svg {
+  position: absolute;
+  right: 6px;
+  pointer-events: none;
+}
+
+.lyrics-source-select option {
+  color: #fff;
+  background: #24242b;
+}
+
 .lyrics-centered button,
 .lyrics-drawer__search button,
 .lyrics-drawer__retry {

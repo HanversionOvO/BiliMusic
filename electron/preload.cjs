@@ -12,6 +12,9 @@ const biliApi = {
   playUrl: (bvid, cid) =>
     ipcRenderer.invoke('bili:playUrl', bvid, cid),
 
+  fetchSubtitle: (subtitleUrl) =>
+    ipcRenderer.invoke('bili:subtitle', subtitleUrl),
+
   nav: () =>
     ipcRenderer.invoke('bili:nav'),
 

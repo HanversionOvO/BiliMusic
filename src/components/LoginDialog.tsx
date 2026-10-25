@@ -13,7 +13,6 @@ interface LoginDialogProps {
 export default function LoginDialog({ onClose, onSuccess }: LoginDialogProps) {
   const [status, setStatus] = useState<QrStatus>('loading')
   const [qrDataUrl, setQrDataUrl] = useState<string>('')
-  const [qrcodeKey, setQrcodeKey] = useState<string>('')
   const [countdown, setCountdown] = useState(180)
   const [errorMsg, setErrorMsg] = useState('')
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -68,7 +67,6 @@ export default function LoginDialog({ onClose, onSuccess }: LoginDialogProps) {
         color: { dark: '#18191C', light: '#FFFFFF' },
       })
       setQrDataUrl(dataUrl)
-      setQrcodeKey(data.qrcodeKey)
       setStatus('waiting')
       startPolling(data.qrcodeKey)
     } catch (e: any) {

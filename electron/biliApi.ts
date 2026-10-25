@@ -24,6 +24,16 @@ export function registerBiliApiHandlers() {
     return fetchBiliApi(`/x/player/playurl?bvid=${bvid}&cid=${cid}&qn=0&fnver=0&fnval=16&fourk=1`)
   })
 
+  // 获取 CC/AI 字幕文件：字幕 CDN 不允许渲染进程跨域读取，改由主进程请求。
+  ipcMain.handle('bili:subtitle', async (_event, subtitleUrl: string) => {
+    if (!isAllowedSubtitleUrl(subtitleUrl)) throw new Error('Invalid subtitle URL')
+    const response = await net.fetch(subtitleUrl, {
+      headers: { Referer: BILI_REFERER },
+    })
+    if (!response.ok) throw new Error(`Subtitle request failed: ${response.status}`)
+    return response.json()
+  })
+
   // 用户信息（登录状态）
   ipcMain.handle('bili:nav', async () => {
     return fetchBiliApi('/x/web-interface/nav')
@@ -188,6 +198,20 @@ export function registerBiliApiHandlers() {
     await session.defaultSession.cookies.remove(BILI_API, 'DedeUserID__ckMd5')
     return { success: true }
   })
+}
+
+function isAllowedSubtitleUrl(rawUrl: string): boolean {
+  try {
+    const url = new URL(rawUrl)
+    return url.protocol === 'https:' && (
+      url.hostname === 'bilibili.com'
+      || url.hostname.endsWith('.bilibili.com')
+      || url.hostname === 'hdslb.com'
+      || url.hostname.endsWith('.hdslb.com')
+    )
+  } catch {
+    return false
+  }
 }
 
 // ===== BiliBili API Fetch Helper =====

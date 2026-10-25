@@ -9,6 +9,12 @@ export interface Track {
   // 音乐中心曲目的顶层 avid+cid：当 bvid 稿件不存在（-404）时回退直取音乐流
   aid?: string | number
   cid?: string | number
+  // 当前分 P 的播放信息；cid 保留兼容旧数据，pageCid 用于实际分 P 播放
+  page?: number
+  pageCount?: number
+  pageCid?: string | number
+  // B站分P标题，用于歌词匹配；title 仍保留完整的展示标题
+  pagePart?: string
   playCount: number
   isLiked: boolean
   likedAt?: string // 收藏时间，供云同步按 like/unlike 时间合并
@@ -41,6 +47,7 @@ export interface AppSettings {
   downloadDir: string
   autoPlay: boolean
   showLyrics: boolean
+  lyricsSource: 'auto' | 'remote' | 'bilibili'
 }
 
 export type NavItem = {

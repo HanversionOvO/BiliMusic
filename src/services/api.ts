@@ -83,6 +83,7 @@ export interface VideoInfo {
   ownerMid: number
   duration: number
   cid: number
+  pages?: Array<{ cid: number; part: string; duration: number }>
   stat: {
     view: number
     like: number
@@ -104,6 +105,11 @@ export async function getVideoDetail(bvid: string): Promise<VideoInfo> {
     ownerMid: data.owner?.mid,
     duration: data.duration,
     cid: data.cid,
+    pages: (data.pages || []).map((page: { cid: number; part: string; duration: number }) => ({
+      cid: page.cid,
+      part: page.part || '',
+      duration: page.duration || 0,
+    })),
     stat: {
       view: data.stat?.view,
       like: data.stat?.like,
@@ -169,7 +175,7 @@ export async function getVideoComments(
 
 export async function extractAudio(
   bvid: string,
-  fallback?: { aid?: string | number; cid?: string | number },
+  fallback?: { aid?: string | number; cid?: string | number; pageCid?: string | number },
 ): Promise<TrackSource> {
   // 统一走渲染进程浏览器 fetch：主进程 net.fetch 会被 B站反爬拦截（-352）
   const { extractAudioFromVideo } = await import('@/services/bilibiliApi')
@@ -385,7 +391,7 @@ export async function getPopularVideos(ps = 10, pn = 1): Promise<VideoInfo[]> {
     ownerName: v.owner?.name,
     ownerMid: v.owner?.mid,
     duration: v.duration,
-    cid: v.cid,
+    cid: v.cid || 0,
     stat: {
       view: v.stat?.view,
       like: v.stat?.like,

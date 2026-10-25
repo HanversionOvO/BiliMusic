@@ -18,6 +18,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   downloadDir: 'D:\\Music\\biliMusic',
   autoPlay: true,
   showLyrics: true,
+  lyricsSource: 'auto',
 }
 
 function notifySettingsChanged() {

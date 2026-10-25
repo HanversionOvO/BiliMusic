@@ -406,7 +406,7 @@ function SidebarLink({ item, compact = false, collapsed = false }: { item: NavIt
 
   return (
     <NavLink to={item.path} style={{ textDecoration: 'none' }}>
-      {({ isActive }) => {
+      {() => {
         const selected = item.path === '/discover'
           ? pathname === '/' || pathname === '/discover'
           : pathname === item.path

@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useCallback, useMemo, useRef, useEffect, type ReactNode } from 'react'
 import type { Track, RepeatMode } from '@/types'
-import { extractAudio } from '@/services/api'
+import { extractAudio, getVideoDetail } from '@/services/api'
 import { addRecentTrack, toggleFavoriteTrack, loadFavoriteTracks } from '@/utils/storage'
 import { useAppSettings } from '@/hooks/useAppSettings'
 
@@ -158,6 +158,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const progressRef = useRef(progress)
   const durationRef = useRef(duration)
+  const pendingSeekRef = useRef<number | null>(null)
+  const loadVersionRef = useRef(0)
 
   const showToast = useCallback((msg: string) => {
     setToast(msg)
@@ -171,8 +173,19 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     audio.volume = volume / 100
     audioRef.current = audio
 
-    const onTimeUpdate = () => setProgress(audio.currentTime)
-    const onDuration = () => setDuration(audio.duration || 0)
+    const onTimeUpdate = () => {
+      if (Number.isFinite(audio.currentTime)) setProgress(Math.max(0, audio.currentTime))
+    }
+    const onDuration = () => {
+      if (!Number.isFinite(audio.duration) || audio.duration <= 0) return
+      setDuration(audio.duration)
+      const pending = pendingSeekRef.current
+      if (pending === null) return
+      const target = Math.min(Math.max(pending, 0), audio.duration)
+      pendingSeekRef.current = null
+      audio.currentTime = target
+      setProgress(target)
+    }
     const onEnded = () => { /* handled in playTrack */ }
     const onError = () => {
       setLoadingAudio(false)
@@ -255,24 +268,88 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     }
   }, [isShuffled, queue, repeatMode, settings.autoPlay])
 
-  // 当 currentTrack 变化时加载并播放音频
+  // 当 currentTrack 变化时加载并播放音频；没有 pageCid 的视频先展开为独立分 P。
   useEffect(() => {
     if (!currentTrack || !audioRef.current) return
 
     let cancelled = false
     const audio = audioRef.current
+    const track = currentTrack
+    const loadVersion = ++loadVersionRef.current
 
     async function loadAndPlay() {
       setLoadingAudio(true)
+      setDuration(0)
       try {
-        const fallback = currentTrack!.aid && currentTrack!.cid
-          ? { aid: currentTrack!.aid, cid: currentTrack!.cid }
-          : undefined
-        const source = await extractAudio(currentTrack!.bvid || currentTrack!.id, fallback)
-        if (cancelled) return
+        if (!track.pageCid && track.page === undefined) {
+          try {
+            const detail = await getVideoDetail(track.bvid || track.id)
+            if (cancelled || loadVersionRef.current !== loadVersion) return
+
+            const pages = detail.pages || []
+            if (pages.length > 1) {
+              const pageTracks: Track[] = pages.map((page, index) => ({
+                ...track,
+                id: `${track.bvid || track.id}:p${index + 1}`,
+                title: `${detail.title || track.title} · P${index + 1}${page.part ? ` · ${page.part}` : ''}`,
+                artist: detail.ownerName || track.artist,
+                coverUrl: detail.pic || track.coverUrl,
+                duration: page.duration || 0,
+                videoUrl: `https://www.bilibili.com/video/${track.bvid || track.id}?p=${index + 1}`,
+                aid: detail.aid || track.aid,
+                cid: undefined,
+                page: index + 1,
+                pageCount: pages.length,
+                pageCid: page.cid,
+                pagePart: page.part || '',
+              }))
+
+              const pageStartIndex = queue.findIndex((item) => item.id === track.id)
+              setQueue((prev) => {
+                const index = prev.findIndex((item) => item.id === track.id)
+                if (index < 0) return [...pageTracks, ...prev]
+                return [...prev.slice(0, index), ...pageTracks, ...prev.slice(index + 1)]
+              })
+              currentIndexRef.current = pageStartIndex >= 0 ? pageStartIndex : 0
+              setProgress(0)
+              setCurrentTrack(pageTracks[0])
+              return
+            }
+
+            if (detail.cid) {
+              setCurrentTrack((prev) => prev && prev.id === track.id
+                ? {
+                    ...prev,
+                    aid: detail.aid || prev.aid,
+                    duration: detail.duration || prev.duration,
+                    coverUrl: detail.pic || prev.coverUrl,
+                    artist: detail.ownerName || prev.artist,
+                    page: 1,
+                    pageCount: 1,
+                    pageCid: detail.cid,
+                  }
+                : prev)
+              return
+            }
+          } catch {
+            // 详情不可用时继续走 avid+cid 回退路径。
+          }
+        }
+
+        const fallback = track.aid && track.cid
+          ? { aid: track.aid, cid: track.cid, pageCid: track.pageCid }
+          : track.pageCid
+            ? { pageCid: track.pageCid }
+            : undefined
+        const source = await extractAudio(track.bvid || track.id, fallback)
+        if (cancelled || loadVersionRef.current !== loadVersion) return
+
         const targetProgress = progress > 0 ? progress : 0
+        pendingSeekRef.current = targetProgress
         audio.src = source.audioUrl
-        audio.currentTime = targetProgress
+        audio.load()
+        if (source.duration > 0) setDuration(source.duration)
+
         if (shouldAutoplayRef.current) {
           await audio.play()
           setIsPlaying(true)
@@ -280,32 +357,39 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
           audio.pause()
           setIsPlaying(false)
         }
-        setDuration(source.duration || audio.duration || 0)
 
         // 更新封面（提取到的可能更高清）
         if (source.coverUrl) {
           setCurrentTrack(prev => prev ? { ...prev, coverUrl: source.coverUrl } : null)
         }
         // 记录最近播放
-        addRecentTrack({ ...currentTrack!, coverUrl: source.coverUrl || currentTrack!.coverUrl })
+        addRecentTrack({ ...track, coverUrl: source.coverUrl || track.coverUrl })
       } catch {
         if (!cancelled) {
-          // 降级：直接用原始信息触发 play（无音频源，标记为不可播放）
           setIsPlaying(false)
         }
       } finally {
-        if (!cancelled) setLoadingAudio(false)
+        if (!cancelled && loadVersionRef.current === loadVersion) setLoadingAudio(false)
       }
     }
 
     loadAndPlay()
-    return () => { cancelled = true }
-  }, [currentTrack?.id, currentTrack?.bvid])
+    return () => {
+      cancelled = true
+      if (loadVersionRef.current === loadVersion) pendingSeekRef.current = null
+    }
+  }, [currentTrack?.id, currentTrack?.bvid, currentTrack?.page, currentTrack?.pageCid])
 
   // ended 事件
   useEffect(() => {
     if (!audioRef.current) return
-    const handler = () => handleTrackEnd()
+    const handler = () => {
+      const audio = audioRef.current
+      const actualDuration = audio && Number.isFinite(audio.duration) ? audio.duration : 0
+      // 只有确实到达当前音频末尾才切换，避免错误 duration 或异常 seek 误触发下一首。
+      if (actualDuration > 0 && audio && audio.currentTime < actualDuration - 0.25) return
+      handleTrackEnd()
+    }
     audioRef.current.addEventListener('ended', handler)
     return () => audioRef.current?.removeEventListener('ended', handler)
   }, [handleTrackEnd])
@@ -362,10 +446,22 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }, [isShuffled, queue])
 
   const handleSetProgress = useCallback((p: number) => {
-    if (audioRef.current) {
-      audioRef.current.currentTime = p
+    const requested = Number.isFinite(p) ? Math.max(0, p) : 0
+    const audio = audioRef.current
+    const actualDuration = audio && Number.isFinite(audio.duration) && audio.duration > 0
+      ? audio.duration
+      : 0
+    const max = actualDuration || durationRef.current
+    const target = max > 0 ? Math.min(requested, max) : requested
+
+    if (audio) {
+      if (Number.isFinite(audio.duration) && audio.duration > 0 && audio.readyState >= 1) {
+        audio.currentTime = target
+      } else {
+        pendingSeekRef.current = target
+      }
     }
-    setProgress(p)
+    setProgress(target)
   }, [])
 
   const handleSetVolume = useCallback((v: number) => {

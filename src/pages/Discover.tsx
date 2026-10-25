@@ -24,6 +24,7 @@ function videoToTrack(video: VideoInfo): Track {
     duration: video.duration,
     videoUrl: `https://www.bilibili.com/video/${video.bvid}`,
     bvid: video.bvid,
+    pageCid: video.cid || undefined,
     playCount: video.stat?.view || 0,
     isLiked: false,
   }

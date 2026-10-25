@@ -2,6 +2,7 @@ interface BiliApi {
   search: (keyword: string, page?: number, pageSize?: number) => Promise<any>
   videoDetail: (bvid: string) => Promise<any>
   playUrl: (bvid: string, cid: number) => Promise<any>
+  fetchSubtitle: (subtitleUrl: string) => Promise<any>
   nav: () => Promise<any>
   popular: (ps?: number, pn?: number) => Promise<any>
   recommend: (ps?: number) => Promise<any>

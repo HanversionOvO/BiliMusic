@@ -11,7 +11,7 @@ import { useAppSettings } from '@/hooks/useAppSettings'
 import { useLyrics } from '@/hooks/useLyrics'
 import PlayerSlider from '@/components/PlayerSlider'
 import LyricsView from '@/components/LyricsView'
-import type { LyricCandidate } from '@/services/lyrics'
+import type { LyricCandidate, LyricSource } from '@/services/lyrics'
 import { getVideoComments, type VideoComment } from '@/services/api'
 
 const sliderTheme = {
@@ -29,10 +29,14 @@ export default function NowPlaying() {
   const player = usePlayer()
   const { progress, duration: liveDuration, setProgress } = usePlayerProgress()
   const { expanded, close } = useNowPlaying()
-  const { settings } = useAppSettings()
+  const { settings, setAppSettings } = useAppSettings()
   const track = player.currentTrack
-  const lyrics = useLyrics(track, expanded && settings.showLyrics)
-  const duration = liveDuration || track?.duration || 0
+  const lyrics = useLyrics(track, expanded && settings.showLyrics, settings.lyricsSource)
+  const duration = liveDuration > 0
+    ? liveDuration
+    : track?.pageCid
+      ? (track.duration || 0)
+      : 0
   const [fullscreen, setFullscreen] = useState(false)
   const [controlsVisible, setControlsVisible] = useState(true)
   const [commentsOpen, setCommentsOpen] = useState(false)
@@ -378,7 +382,14 @@ export default function NowPlaying() {
               transition={{ ...spring, delay: 0.16 }}
             >
               {settings.showLyrics ? (
-                <LyricsPanel lyrics={lyrics} track={track} onSeek={setProgress} currentTime={progress} />
+                <LyricsPanel
+                  lyrics={lyrics}
+                  track={track}
+                  source={settings.lyricsSource}
+                  onSourceChange={(lyricsSource) => setAppSettings({ lyricsSource })}
+                  onSeek={setProgress}
+                  currentTime={progress}
+                />
               ) : (
                 <Centered>
                   <Music size={42} strokeWidth={1.25} />
@@ -514,10 +525,12 @@ function CommentsPanel({
 }
 
 function LyricsPanel({
-  lyrics, track, onSeek, currentTime,
+  lyrics, track, source, onSourceChange, onSeek, currentTime,
 }: {
   lyrics: ReturnType<typeof useLyrics>
   track: { title: string; artist: string }
+  source: LyricSource
+  onSourceChange: (source: LyricSource) => void
   onSeek: (t: number) => void
   currentTime: number
 }) {
@@ -551,6 +564,23 @@ function LyricsPanel({
 
   return (
     <div className="lyrics-panel">
+      <div className="lyrics-panel__toolbar">
+        <label className="lyrics-source-picker">
+          <span>歌词来源</span>
+          <span className="lyrics-source-select">
+            <select
+              value={source}
+              onChange={(event) => onSourceChange(event.target.value as LyricSource)}
+              aria-label="歌词来源"
+            >
+              <option value="auto">自动</option>
+              <option value="remote">QQ Music</option>
+              <option value="bilibili">Bilibili AI 字幕</option>
+            </select>
+            <ChevronDown size={13} aria-hidden="true" />
+          </span>
+        </label>
+      </div>
       <div className="lyrics-panel__body">
         {status === 'loading' && (
           <Centered>

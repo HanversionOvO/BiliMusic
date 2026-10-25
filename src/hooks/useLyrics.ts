@@ -7,6 +7,7 @@ import {
   clearLyricCache,
   type LyricResult,
   type LyricCandidate,
+  type LyricSource,
 } from '@/services/lyrics'
 
 export type LyricStatus = 'idle' | 'loading' | 'ok' | 'unsynced' | 'empty'
@@ -15,7 +16,7 @@ export type LyricStatus = 'idle' | 'loading' | 'ok' | 'unsynced' | 'empty'
  * 按当前曲目懒加载歌词（仅当 enabled，即歌词页打开时）。
  * 过期请求丢弃，避免快速切歌时的竞态。
  */
-export function useLyrics(track: Track | null, enabled: boolean) {
+export function useLyrics(track: Track | null, enabled: boolean, source: LyricSource = 'auto') {
   const [status, setStatus] = useState<LyricStatus>('idle')
   const [result, setResult] = useState<LyricResult | null>(null)
   const reqIdRef = useRef(0)
@@ -24,7 +25,7 @@ export function useLyrics(track: Track | null, enabled: boolean) {
     const reqId = ++reqIdRef.current
     setStatus('loading')
     setResult(null)
-    const res = await getLyricForTrack(t)
+    const res = await getLyricForTrack(t, source)
     if (reqId !== reqIdRef.current) return // 已切歌，丢弃过期结果
     if (!res || (!res.lines.length && !res.instrumental)) {
       setStatus('empty')
@@ -33,14 +34,14 @@ export function useLyrics(track: Track | null, enabled: boolean) {
     }
     setResult(res)
     setStatus(res.synced ? 'ok' : 'unsynced')
-  }, [])
+  }, [source])
 
   useEffect(() => {
     if (!enabled || !track) return
     load(track)
     // 仅在曲目切换或启用时重取
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, track?.id])
+  }, [enabled, track?.id, track?.bvid, track?.cid, track?.page, track?.pageCid, source])
 
   const search = useCallback((q: string): Promise<LyricCandidate[]> => searchLyricCandidates(q), [])
 

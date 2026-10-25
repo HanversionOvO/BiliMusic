@@ -442,11 +442,14 @@ function StyledSelect({
 }: {
   value: string
   onChange: (value: string) => void
-  options: string[]
+  options: Array<string | { value: string; label: string }>
 }) {
   return (
     <select className="settings-select" value={value} onChange={(e) => onChange(e.target.value)}>
-      {options.map(option => <option key={option}>{option}</option>)}
+      {options.map(option => {
+        const item = typeof option === 'string' ? { value: option, label: option } : option
+        return <option key={item.value} value={item.value}>{item.label}</option>
+      })}
     </select>
   )
 }

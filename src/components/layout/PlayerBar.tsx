@@ -41,7 +41,11 @@ export default function PlayerBar() {
   const { open } = useNowPlaying()
   const { openAddToPlaylist } = useAddToPlaylist()
   const [queueOpen, setQueueOpen] = useState(false)
-  const trackDuration = duration || player.currentTrack?.duration || 0
+  const trackDuration = duration > 0
+    ? duration
+    : player.currentTrack?.pageCid
+      ? (player.currentTrack.duration || 0)
+      : 0
   const remaining = Math.max(trackDuration - progress, 0)
 
   return (

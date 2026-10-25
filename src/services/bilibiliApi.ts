@@ -51,6 +51,17 @@ class BiliApiError extends Error {
   }
 }
 
+async function biliWbiFetch<T>(path: string, params: Record<string, string | number>): Promise<T> {
+  const query = await encodeWbi(params)
+  const resp = await fetch(`${BILI_API}${path}?${query}`, {
+    credentials: 'include',
+    headers: { Referer: 'https://www.bilibili.com' },
+  })
+  const data = await resp.json()
+  if (data.code !== 0) throw new BiliApiError(data.code, data.message, path)
+  return data.data as T
+}
+
 // ===== WBI 签名 =====
 //
 // B 站部分接口（搜索等）要求 WBI 签名：在请求参数中追加 wts + w_rid。
@@ -349,6 +360,126 @@ export async function getVideoDetail(bvid: string): Promise<VideoDetail> {
   return biliFetch('/x/web-interface/view', { params: { bvid } })
 }
 
+// ===== B站字幕 =====
+
+interface PlayerSubtitleItem {
+  id?: number
+  lan?: string
+  lan_doc?: string
+  subtitle_url?: string
+  ai_status?: number
+  ai_type?: number
+}
+
+interface PlayerV2Data {
+  subtitle?: {
+    list?: PlayerSubtitleItem[]
+    subtitles?: PlayerSubtitleItem[]
+  }
+}
+
+interface SubtitlePayload {
+  body?: Array<{
+    from?: number
+    to?: number
+    content?: string
+  }>
+}
+
+export interface BilibiliSubtitleLyric {
+  lines: Array<{ time: number; text: string }>
+  subtitleId: string
+  language: string
+}
+
+function cleanSubtitleText(raw: string): string {
+  return raw.replace(/^♪ /, '').replace(/ ♪$/, '')
+}
+
+function normalizeSubtitleUrl(raw: string): string {
+  if (raw.startsWith('//')) return `https:${raw}`
+  if (raw.startsWith('/')) return `${BILI_API}${raw}`
+  return raw
+}
+
+async function fetchSubtitlePayload(url: string): Promise<SubtitlePayload> {
+  const electronFetch = typeof window !== 'undefined'
+    ? window.electronAPI?.biliApi?.fetchSubtitle
+    : undefined
+  if (electronFetch) return electronFetch(url) as Promise<SubtitlePayload>
+
+  const response = await fetch(url, {
+    credentials: 'include',
+    headers: { Referer: 'https://www.bilibili.com' },
+  })
+  if (!response.ok) throw new Error(`Subtitle request failed: ${response.status}`)
+  return response.json() as Promise<SubtitlePayload>
+}
+
+function subtitlePriority(item: PlayerSubtitleItem): number {
+  const language = `${item.lan || ''} ${item.lan_doc || ''}`.toLowerCase()
+  let score = 0
+  // B站页面显示为“中文（AI）”时，lan_doc 通常包含“AI”，而不是只依赖 ai_status。
+  if (language.includes('ai-zh') || language.includes('zh-cn')) score += 100
+  if (language.includes('中文') || language.includes('chinese')) score += 80
+  if (language.includes('ai') || language.includes('人工智能')) score += 60
+  if (item.ai_status || item.ai_type) score += 20
+  return score
+}
+
+/**
+ * 读取 B 站播放器提供的 CC/AI 字幕，并转换为歌词时间轴。
+ * 这条时间轴来自视频本身，不依赖 QQ Music 歌曲时长，因此适合合集视频。
+ */
+export async function getBilibiliSubtitleLyric(
+  bvid: string,
+  cid?: string | number,
+): Promise<BilibiliSubtitleLyric | null> {
+  if (!bvid) return null
+  const actualCid = Number(cid) || (await getVideoDetail(bvid)).cid
+  if (!actualCid) return null
+
+  // 未签名的 /x/player/v2 会返回与当前视频不匹配的字幕数据；页面实际使用 WBI 签名接口。
+  const player = await biliWbiFetch<PlayerV2Data>('/x/player/wbi/v2', {
+    bvid,
+    cid: actualCid,
+  })
+  // 不同接口版本可能把字幕放在 subtitles 或 list；空数组也是真值，不能使用 || 只取其中一个。
+  const subtitleMap = new Map<string, PlayerSubtitleItem>()
+  for (const item of [
+    ...(player.subtitle?.subtitles || []),
+    ...(player.subtitle?.list || []),
+  ]) {
+    if (item.subtitle_url) subtitleMap.set(item.subtitle_url, item)
+  }
+  const subtitles = [...subtitleMap.values()]
+    .sort((a, b) => subtitlePriority(b) - subtitlePriority(a))
+
+  for (const subtitle of subtitles) {
+    try {
+      const payload = await fetchSubtitlePayload(normalizeSubtitleUrl(subtitle.subtitle_url!))
+      const lines = (payload.body || [])
+        .map((line) => ({
+          time: Number(line.from),
+          text: cleanSubtitleText(line.content || ''),
+        }))
+        .filter((line) => Number.isFinite(line.time) && line.time >= 0 && line.text)
+
+      if (lines.length) {
+        return {
+          lines,
+          subtitleId: String(subtitle.id || subtitle.subtitle_url),
+          language: subtitle.lan_doc || subtitle.lan || 'Bilibili',
+        }
+      }
+    } catch {
+      // 某种字幕格式或 CDN 暂时不可用时继续尝试下一份字幕。
+    }
+  }
+
+  return null
+}
+
 // ===== 评论 =====
 
 export interface ReplyMember {
@@ -463,12 +594,18 @@ export async function getPlayUrl(
  * 30250: 杜比全景声
  * 30251: Hi-Res 无损 FLAC
  */
+function compareAudioStream(a: AudioStream, b: AudioStream): number {
+  // 部分视频的不同音频流带宽相同，但高质量流的 id 更大。
+  // 仅按 bandwidth 排序可能因接口返回顺序选中不稳定的音频流。
+  return b.bandwidth - a.bandwidth || b.id - a.id
+}
+
 export function getBestAudioUrl(playData: PlayUrlData): string {
   const audioStreams = playData.dash.audio
   if (!audioStreams?.length) throw new Error('No audio stream available')
 
-  // 按带宽降序排序，选择最高品质
-  const sorted = [...audioStreams].sort((a, b) => b.bandwidth - a.bandwidth)
+  // 先按带宽，再按音频流 id 选择更高质量且更稳定的流。
+  const sorted = [...audioStreams].sort(compareAudioStream)
   return sorted[0].baseUrl
 }
 
@@ -479,6 +616,7 @@ export interface PopularVideo {
   aid: number
   title: string
   pic: string
+  cid?: number
   owner: VideoOwner
   stat: VideoStat
   duration: number
@@ -607,19 +745,21 @@ export async function extractAudioFromSearch(
  */
 export async function extractAudioFromVideo(
   bvid: string,
-  fallback?: { aid?: string | number; cid?: string | number },
+  fallback?: { aid?: string | number; cid?: string | number; pageCid?: string | number },
 ): Promise<TrackSource> {
   try {
     const detail = await getVideoDetail(bvid)
-    const playData = await getPlayUrl(bvid, detail.cid)
+    // pageCid 是当前分 P 的 CID；旧 cid 仅作为音乐中心稿件失效时的 avid+cid 回退。
+    const cid = Number(fallback?.pageCid) || detail.cid
+    const playData = await getPlayUrl(bvid, cid)
     const audioUrl = getBestAudioUrl(playData)
 
-    const bestAudio = [...playData.dash.audio].sort((a, b) => b.bandwidth - a.bandwidth)[0]
+    const bestAudio = [...playData.dash.audio].sort(compareAudioStream)[0]
 
     return {
       bvid: detail.bvid,
       aid: detail.aid,
-      cid: detail.cid,
+      cid,
       title: detail.title,
       artist: detail.owner.name,
       coverUrl: toHttpsUrl(detail.pic),
