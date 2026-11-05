@@ -617,6 +617,40 @@ ipcMain.on('persistent-storage:remove', (_event, key: string) => {
 ipcMain.handle('shell:open-external', (_event, url: string) => {
   if (typeof url === 'string' && /^https?:\/\//i.test(url)) return shell.openExternal(url)
 })
+// 用系统文件管理器打开本地目录（仅放行已存在的目录，供下载页「打开目录」使用）
+ipcMain.handle('shell:open-path', async (_event, target: string) => {
+  if (typeof target !== 'string' || !target.trim()) return { ok: false }
+  const stats = await fs.promises.stat(target).catch(() => null)
+  if (!stats?.isDirectory()) return { ok: false, error: '目录不存在' }
+  const error = await shell.openPath(target)
+  return error ? { ok: false, error } : { ok: true }
+})
+// 读取本地音频文件（下载曲目离线播放用，仅放行常见音频扩展名的已存在文件）
+ipcMain.handle('fs:read-audio', async (_event, filePath: string) => {
+  if (typeof filePath !== 'string' || !/\.(m4a|mp3|flac|aac|ogg|wav)$/i.test(filePath)) return null
+  const stats = await fs.promises.stat(filePath).catch(() => null)
+  if (!stats?.isFile()) return null
+  const buffer = await fs.promises.readFile(filePath)
+  return new Uint8Array(buffer)
+})
+// 检查本地音频文件是否存在（下载页与磁盘状态同步用，白名单同 fs:read-audio）
+ipcMain.handle('fs:exists-audio', async (_event, filePath: string) => {
+  if (typeof filePath !== 'string' || !/\.(m4a|mp3|flac|aac|ogg|wav)$/i.test(filePath)) return false
+  const stats = await fs.promises.stat(filePath).catch(() => null)
+  return !!stats?.isFile()
+})
+// 删除本地音频文件（下载页移除条目时联动删除，白名单同 fs:read-audio）
+ipcMain.handle('fs:delete-audio', async (_event, filePath: string) => {
+  if (typeof filePath !== 'string' || !/\.(m4a|mp3|flac|aac|ogg|wav)$/i.test(filePath)) return { ok: false }
+  const stats = await fs.promises.stat(filePath).catch(() => null)
+  if (!stats?.isFile()) return { ok: false }
+  try {
+    await fs.promises.unlink(filePath)
+    return { ok: true }
+  } catch {
+    return { ok: false }
+  }
+})
 
 app.whenReady().then(() => {
   // 生产环境注册 app:// 协议，映射到打包后的 dist 目录（asar 内 file:// 读取透明支持）

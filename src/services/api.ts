@@ -178,12 +178,56 @@ export async function extractAudio(
 
 // ===== 下载音频 =====
 
-export async function downloadAudio(audioUrl: string, filename: string): Promise<{ filePath: string; size: number }> {
+export async function downloadAudio(
+  audioUrl: string,
+  filename: string,
+  dir?: string,
+): Promise<{ filePath: string; size: number }> {
   if (isElectron()) {
-    return window.electronAPI.biliApi.downloadAudio(audioUrl, filename)
+    return window.electronAPI.biliApi.downloadAudio(audioUrl, filename, dir)
   }
 
   throw new Error('Audio download requires Electron environment')
+}
+
+// 用系统文件管理器打开本地目录（下载页「打开目录」）
+export async function openLocalDir(dir: string): Promise<{ ok: boolean; error?: string }> {
+  if (isElectron() && window.electronAPI.openPath) {
+    return window.electronAPI.openPath(dir)
+  }
+  return { ok: false, error: '当前环境不支持打开本地目录' }
+}
+
+// 删除本地下载的音频文件（不存在或环境不支持时静默返回 false）
+export async function deleteLocalAudio(filePath: string): Promise<boolean> {
+  if (!isElectron() || !window.electronAPI.deleteLocalAudio) return false
+  const result = await window.electronAPI.deleteLocalAudio(filePath)
+  return !!result?.ok
+}
+
+// 检查本地下载的音频文件是否仍存在
+export async function existsLocalAudio(filePath: string): Promise<boolean> {
+  if (!isElectron() || !window.electronAPI.existsLocalAudio) return false
+  return window.electronAPI.existsLocalAudio(filePath)
+}
+
+const AUDIO_MIME_BY_EXT: Record<string, string> = {
+  '.m4a': 'audio/mp4',
+  '.mp3': 'audio/mpeg',
+  '.flac': 'audio/flac',
+  '.aac': 'audio/aac',
+  '.ogg': 'audio/ogg',
+  '.wav': 'audio/wav',
+}
+
+// 读取本地下载的音频文件并生成可播放的 blob URL；文件不存在或非 Electron 环境返回 null
+export async function getLocalAudioUrl(filePath: string): Promise<string | null> {
+  if (!isElectron() || !window.electronAPI.readLocalAudio) return null
+  const data = await window.electronAPI.readLocalAudio(filePath)
+  if (!data) return null
+  const ext = filePath.slice(filePath.lastIndexOf('.')).toLowerCase()
+  const blob = new Blob([data as unknown as BlobPart], { type: AUDIO_MIME_BY_EXT[ext] || 'audio/mp4' })
+  return URL.createObjectURL(blob)
 }
 
 // ===== 用户信息 =====

@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { CheckSquare, ListMusic, Music, Play, Square, Trash2, X } from 'lucide-react'
 import { usePlayer } from '@/contexts/PlayerContext'
 import AddToPlaylistButton from '@/components/AddToPlaylistButton'
+import { DownloadTrackButton } from '@/components/TrackActions'
 import {
   EmptyLibrary,
   MusicHero,
@@ -227,6 +228,7 @@ function PlaylistDetail({ playlistId }: { playlistId: string }) {
                 ) : undefined}
                 extra={(
                   <div className="am-extra-actions">
+                    <DownloadTrackButton track={track} size={15} />
                     <AddToPlaylistButton track={track} size={15} />
                     {!editing && (
                       <button className="am-icon-danger" onClick={(e) => { e.stopPropagation(); removeOne(track.id) }} title="移出歌单">
