@@ -30,8 +30,8 @@ const biliApi = {
   extractAudio: (bvid) =>
     ipcRenderer.invoke('bili:extractAudio', bvid),
 
-  downloadAudio: (audioUrl, filename) =>
-    ipcRenderer.invoke('bili:downloadAudio', audioUrl, filename),
+  downloadAudio: (audioUrl, filename, dir) =>
+    ipcRenderer.invoke('bili:downloadAudio', audioUrl, filename, dir),
 
   // 扫码登录
   qrGenerate: () =>
@@ -88,6 +88,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('tray:player-command', listener)
   },
   openExternal: (url) => ipcRenderer.invoke('shell:open-external', url),
+  openPath: (target) => ipcRenderer.invoke('shell:open-path', target),
+  readLocalAudio: (filePath) => ipcRenderer.invoke('fs:read-audio', filePath),
+  deleteLocalAudio: (filePath) => ipcRenderer.invoke('fs:delete-audio', filePath),
+  existsLocalAudio: (filePath) => ipcRenderer.invoke('fs:exists-audio', filePath),
   getAppVersion: () => ipcRenderer.invoke('app:get-version'),
   checkForUpdate: () => ipcRenderer.invoke('updater:check'),
   quitAndInstall: () => ipcRenderer.send('updater:quit-and-install'),

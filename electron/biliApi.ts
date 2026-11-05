@@ -49,11 +49,16 @@ export function registerBiliApiHandlers() {
     return fetchBiliApi(`/x/v3/fav/folder/created/list-all?up_mid=${mid}`)
   })
 
-  // 下载音频文件到本地
-  ipcMain.handle('bili:downloadAudio', async (_event, audioUrl: string, filename: string) => {
-    const downloadDir = path.join(app.getPath('userData'), 'downloads')
+  // 下载音频文件到本地（dir 来自渲染层设置的下载目录，未传时回退 userData/downloads）
+  ipcMain.handle('bili:downloadAudio', async (_event, audioUrl: string, filename: string, dir?: string) => {
+    if (typeof audioUrl !== 'string' || !/^https?:\/\//i.test(audioUrl)) {
+      throw new Error('Invalid audio URL')
+    }
+    const downloadDir = (typeof dir === 'string' && dir.trim())
+      ? dir.trim()
+      : path.join(app.getPath('userData'), 'downloads')
     await fs.mkdir(downloadDir, { recursive: true })
-    const filePath = path.join(downloadDir, filename)
+    const filePath = path.join(downloadDir, sanitizeFilename(filename))
 
     const response = await net.fetch(audioUrl, {
       headers: { Referer: BILI_REFERER },
@@ -226,4 +231,14 @@ function parseCookieName(setCookie: string): string {
 function parseCookieValue(setCookie: string): string {
   const pair = setCookie.split(';')[0]
   return pair.split('=').slice(1).join('=').trim()
+}
+
+// 清洗下载文件名：去掉路径分隔符与非法字符，避免写出目标目录之外
+function sanitizeFilename(filename: string): string {
+  const ext = path.extname(filename).slice(0, 10) || '.m4a'
+  const base = path.basename(filename, path.extname(filename))
+    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_')
+    .replace(/^[.\s]+|[.\s]+$/g, '')
+    .slice(0, 120)
+  return (base || 'download') + ext
 }

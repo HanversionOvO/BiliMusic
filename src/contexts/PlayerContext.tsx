@@ -1,7 +1,8 @@
 import { createContext, useContext, useState, useCallback, useMemo, useRef, useEffect, type ReactNode } from 'react'
 import type { Track, RepeatMode } from '@/types'
-import { extractAudio } from '@/services/api'
+import { extractAudio, getLocalAudioUrl } from '@/services/api'
 import { addRecentTrack, toggleFavoriteTrack, loadFavoriteTracks } from '@/utils/storage'
+import { getDownloadByTrackId } from '@/utils/downloads'
 import { useAppSettings } from '@/hooks/useAppSettings'
 
 interface PlayerState {
@@ -152,6 +153,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const [toast, setToast] = useState<string | null>(null)
 
   const audioRef = useRef<HTMLAudioElement | null>(null)
+  // 本地文件播放用的 blob URL（切歌时释放上一个，避免内存泄漏）
+  const blobUrlRef = useRef<string | null>(null)
   const shuffledQueueRef = useRef<Track[]>([])
   const currentIndexRef = useRef(restoredRef.current.currentIndex)
   const shouldAutoplayRef = useRef(Boolean(restoredRef.current.currentTrack && restoredRef.current.wasPlaying))
@@ -255,32 +258,50 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     }
   }, [isShuffled, queue, repeatMode, settings.autoPlay])
 
-  // 当 currentTrack 变化时加载并播放音频
+  // 当 currentTrack 变化时加载并播放音频（已下载的曲目优先播放本地文件，支持离线）
   useEffect(() => {
     if (!currentTrack || !audioRef.current) return
 
     let cancelled = false
     const audio = audioRef.current
 
+    async function applySrc(src: string, fallbackDuration: number) {
+      audio.src = src
+      audio.currentTime = progress > 0 ? progress : 0
+      if (shouldAutoplayRef.current) {
+        await audio.play()
+        setIsPlaying(true)
+      } else {
+        audio.pause()
+        setIsPlaying(false)
+      }
+      setDuration(audio.duration > 0 ? audio.duration : fallbackDuration)
+    }
+
     async function loadAndPlay() {
       setLoadingAudio(true)
       try {
+        // 1) 已下载 → 播放本地文件（离线可用）
+        const downloaded = getDownloadByTrackId(currentTrack!.id)
+        if (downloaded?.filePath) {
+          const localUrl = await getLocalAudioUrl(downloaded.filePath)
+          if (cancelled) return
+          if (localUrl) {
+            if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current)
+            blobUrlRef.current = localUrl
+            await applySrc(localUrl, currentTrack!.duration || 0)
+            addRecentTrack(currentTrack!)
+            return
+          }
+        }
+
+        // 2) 在线提取音频流
         const fallback = currentTrack!.aid && currentTrack!.cid
           ? { aid: currentTrack!.aid, cid: currentTrack!.cid }
           : undefined
         const source = await extractAudio(currentTrack!.bvid || currentTrack!.id, fallback)
         if (cancelled) return
-        const targetProgress = progress > 0 ? progress : 0
-        audio.src = source.audioUrl
-        audio.currentTime = targetProgress
-        if (shouldAutoplayRef.current) {
-          await audio.play()
-          setIsPlaying(true)
-        } else {
-          audio.pause()
-          setIsPlaying(false)
-        }
-        setDuration(source.duration || audio.duration || 0)
+        await applySrc(source.audioUrl, source.duration || 0)
 
         // 更新封面（提取到的可能更高清）
         if (source.coverUrl) {
