@@ -5,6 +5,8 @@ import appIcon from '@/assets/icon.png'
 export default function TitleBar() {
   const [maximized, setMaximized] = useState(false)
   const useNativeWindowControls = window.electronAPI?.platform === 'openharmony'
+  const isMobileWeb = /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent) && !window.electronAPI
+  if (isMobileWeb) return null
 
   useEffect(() => {
     const api = window.electronAPI

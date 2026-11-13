@@ -2,7 +2,12 @@ import { createContext, useContext, useState, useCallback, useMemo, useRef, useE
 import type { Track, RepeatMode } from '@/types'
 import { extractAudio } from '@/services/api'
 import { addRecentTrack, toggleFavoriteTrack, loadFavoriteTracks } from '@/utils/storage'
+import { syncMediaState, stopMediaService, onMediaCommand, onMediaSeek } from '@/utils/mediaBridge'
+import { isMobilePlatform } from '@/hooks/useIsMobile'
 import { useAppSettings } from '@/hooks/useAppSettings'
+
+// 移动端：APP 内音量恒为最大（用户用系统音量键调节）
+const IS_MOBILE = isMobilePlatform()
 
 interface PlayerState {
   currentTrack: Track | null
@@ -36,6 +41,7 @@ interface PlayerActions {
   toggleLike: (trackId: string) => void
   playAll: (tracks: Track[]) => void
   playFromQueue: (index: number) => void
+  showToast: (msg: string) => void
 }
 
 interface PlayerProgress {
@@ -157,6 +163,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const shouldAutoplayRef = useRef(Boolean(restoredRef.current.currentTrack && restoredRef.current.wasPlaying))
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const progressRef = useRef(progress)
+  const nativeMediaSyncRef = useRef<{ key: string; position: number; playing: boolean; at: number } | null>(null)
   const durationRef = useRef(duration)
 
   const showToast = useCallback((msg: string) => {
@@ -168,8 +175,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   // 初始化 audio 元素
   useEffect(() => {
     const audio = new Audio()
-    audio.volume = volume / 100
+    audio.volume = IS_MOBILE ? 1 : volume / 100
     audioRef.current = audio
+    // 仅调试 APK 暴露实际音频对象，供安卓端到端检查读取解码/缓冲/seek 状态。
+    if ((window as any).Capacitor?.DEBUG) (window as any).__bilimusicAudio = audio
 
     const onTimeUpdate = () => setProgress(audio.currentTime)
     const onDuration = () => setDuration(audio.duration || 0)
@@ -194,13 +203,18 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  // volume 同步到 audio
+  // volume 同步到 audio（移动端恒最大，不响应音量状态）
   useEffect(() => {
     if (audioRef.current) {
-      audioRef.current.volume = volume / 100
-      audioRef.current.muted = isMuted
+      if (IS_MOBILE) {
+        audioRef.current.volume = 1
+        audioRef.current.muted = false
+      } else {
+        audioRef.current.volume = volume / 100
+        audioRef.current.muted = isMuted
+      }
     }
-    localStorage.setItem('bilimusic_volume', String(volume))
+    if (!IS_MOBILE) localStorage.setItem('bilimusic_volume', String(volume))
   }, [volume, isMuted])
 
   useEffect(() => {
@@ -560,6 +574,44 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }, [currentTrack?.artist, currentTrack?.coverUrl, currentTrack?.id, currentTrack?.title, isPlaying, queue.length])
 
   useEffect(() => {
+    if (!currentTrack) {
+      nativeMediaSyncRef.current = null
+      void stopMediaService()
+      return
+    }
+    const now = Date.now()
+    const key = JSON.stringify([currentTrack.id, currentTrack.title, currentTrack.artist, currentTrack.coverUrl, duration])
+    const last = nativeMediaSyncRef.current
+    const elapsed = last ? (now - last.at) / 1000 : 0
+    const expectedPosition = last ? last.position + (last.playing ? elapsed : 0) : 0
+    const positionChanged = Math.abs(progress - expectedPosition) >= (isPlaying ? 1.5 : 0.01)
+    // 系统按播放速度推进进度；常规同步最多每秒一次，跳转/暂停/换封面立即同步。
+    if (last && last.key === key && last.playing === isPlaying
+      && (!isPlaying || elapsed < 1) && !positionChanged) return
+    nativeMediaSyncRef.current = { key, position: progress, playing: isPlaying, at: now }
+    void syncMediaState({
+      title: currentTrack.title,
+      artist: currentTrack.artist,
+      coverUrl: currentTrack.coverUrl,
+      playing: isPlaying,
+      position: progress,
+      duration,
+    })
+  }, [currentTrack?.artist, currentTrack?.coverUrl, currentTrack?.id, currentTrack?.title, duration, isPlaying, progress])
+
+  useEffect(() => onMediaSeek(handleSetProgress), [handleSetProgress])
+
+  useEffect(() => {
+    // Android 通知栏/锁屏控制命令（与 Electron 托盘命令同级）
+    return onMediaCommand((command) => {
+      if (command === 'play' && !isPlaying) togglePlay()
+      if (command === 'pause' && isPlaying) togglePlay()
+      if (command === 'next') next()
+      if (command === 'prev') prev()
+    })
+  }, [isPlaying, next, prev, togglePlay])
+
+  useEffect(() => {
     return window.electronAPI?.onTrayPlayerCommand?.((command) => {
       if (command === 'toggle-play') togglePlay()
       if (command === 'next') next()
@@ -686,11 +738,12 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     toggleLike,
     playAll,
     playFromQueue,
+    showToast,
   }), [
     currentTrack, isPlaying, volume, isMuted, repeatMode, isShuffled, queue, loadingAudio,
     play, pause, togglePlay, next, prev, handleSetVolume, setIsMuted, setRepeatMode, setIsShuffled,
     addToQueue, addTracksToQueue, removeFromQueue, removeMultipleFromQueue, moveInQueue,
-    playNow, playNext, clearQueue, toggleLike, playAll, playFromQueue,
+    playNow, playNext, clearQueue, toggleLike, playAll, playFromQueue, showToast,
   ])
 
   // 进度高频更新（timeupdate ~4Hz）独立成 context，仅 PlayerBar/NowPlaying 订阅

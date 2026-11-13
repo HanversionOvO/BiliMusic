@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { CheckSquare, ListMusic, Music, Play, Square, Trash2, X } from 'lucide-react'
+import { AnimatePresence } from 'framer-motion'
+import { CheckSquare, ListMusic, Music, Pencil, Play, Plus, Square, Trash2, X } from 'lucide-react'
 import { usePlayer } from '@/contexts/PlayerContext'
 import AddToPlaylistButton from '@/components/AddToPlaylistButton'
+import PlaylistDialog from '@/components/PlaylistDialog'
+import { isMobilePlatform } from '@/hooks/useIsMobile'
 import {
   EmptyLibrary,
   MusicHero,
@@ -12,11 +15,13 @@ import {
   TrackListRow,
 } from '@/components/AppleMusicPage'
 import {
+  createPlaylist,
   deletePlaylist,
   getPlaylist,
   loadPlaylists,
   PLAYLISTS_CHANGED_EVENT,
   removeTracksFromPlaylist,
+  updatePlaylist,
 } from '@/utils/storage'
 import type { Playlist } from '@/types'
 
@@ -27,6 +32,8 @@ export default function Playlists() {
 
 function PlaylistOverview() {
   const [playlists, setPlaylists] = useState<Playlist[]>(() => loadPlaylists())
+  const [creating, setCreating] = useState(false)
+  const navigate = useNavigate()
 
   useEffect(() => {
     const sync = () => setPlaylists(loadPlaylists())
@@ -39,21 +46,43 @@ function PlaylistOverview() {
   }, [])
 
   const heroImage = playlists.find(p => p.coverUrl)?.coverUrl
+  const mobile = isMobilePlatform()
+
+  const handleCreate = (input: { name: string; description?: string }) => {
+    const playlist = createPlaylist(input)
+    setCreating(false)
+    navigate(`/playlists/${playlist.id}`)
+  }
+
+  const createAction = (
+    <button className="am-action am-action--primary" onClick={() => setCreating(true)}>
+      <Plus size={15} />
+      新建歌单
+    </button>
+  )
 
   return (
     <MusicPageShell>
-      <MusicHero
-        eyebrow="All Playlists"
-        title="所有歌单"
-        subtitle={playlists.length ? `你创建了 ${playlists.length} 个歌单。` : '点击侧边栏播放列表右侧的 +，创建第一个歌单。'}
-        image={heroImage}
-        tone="purple"
-      />
+      {!mobile && (
+        <MusicHero
+          eyebrow="All Playlists"
+          title="所有歌单"
+          subtitle={playlists.length ? `你创建了 ${playlists.length} 个歌单。` : '点击右侧 +，创建第一个歌单。'}
+          image={heroImage}
+          tone="purple"
+          action={createAction}
+        />
+      )}
 
       {playlists.length === 0 ? (
-        <EmptyLibrary icon={<ListMusic size={40} />} title="还没有歌单" subtitle="新建歌单后，会立即显示在这里和侧边栏中。" />
+        <EmptyLibrary
+          icon={<ListMusic size={40} />}
+          title="还没有歌单"
+          subtitle={mobile ? '点击右上角 +，创建第一个歌单。' : '新建歌单后，会立即显示在这里。'}
+          action={mobile ? createAction : undefined}
+        />
       ) : (
-        <MusicSection title="我的歌单" icon={<ListMusic size={22} />}>
+        <MusicSection title="我的歌单" icon={<ListMusic size={22} />} action={mobile ? createAction : undefined}>
           <div className="playlist-grid">
             {playlists.map((playlist) => (
               <PlaylistCard key={playlist.id} playlist={playlist} />
@@ -61,6 +90,15 @@ function PlaylistOverview() {
           </div>
         </MusicSection>
       )}
+
+      <AnimatePresence>
+        {creating && (
+          <PlaylistDialog
+            onClose={() => setCreating(false)}
+            onSubmit={handleCreate}
+          />
+        )}
+      </AnimatePresence>
     </MusicPageShell>
   )
 }
@@ -84,6 +122,7 @@ function PlaylistCard({ playlist }: { playlist: Playlist }) {
 function PlaylistDetail({ playlistId }: { playlistId: string }) {
   const [playlist, setPlaylist] = useState<Playlist | null>(() => getPlaylist(playlistId))
   const [editing, setEditing] = useState(false)
+  const [metaEditing, setMetaEditing] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
   const player = usePlayer()
   const navigate = useNavigate()
@@ -101,6 +140,7 @@ function PlaylistDetail({ playlistId }: { playlistId: string }) {
 
   const tracks = playlist?.tracks || []
   const heroImage = playlist?.coverUrl || tracks[0]?.coverUrl
+  const mobile = isMobilePlatform()
   const updatedText = useMemo(() => {
     if (!playlist?.updatedAt) return ''
     return new Date(playlist.updatedAt).toLocaleDateString()
@@ -117,6 +157,13 @@ function PlaylistDetail({ playlistId }: { playlistId: string }) {
   const handleDelete = () => {
     deletePlaylist(playlist.id)
     navigate('/playlists')
+  }
+
+  const handleSaveMeta = (input: { name: string; description?: string }) => {
+    const updated = { ...playlist, name: input.name, description: input.description, updatedAt: new Date().toISOString() }
+    updatePlaylist(updated)
+    setPlaylist(updated)
+    setMetaEditing(false)
   }
 
   const removeSelected = () => {
@@ -158,34 +205,54 @@ function PlaylistDetail({ playlistId }: { playlistId: string }) {
     })
   }
 
+  const playAllAction = tracks.length > 0 && (
+    <button className="am-action am-action--primary" onClick={() => player.playAll(tracks)}>
+      <Play size={15} fill="currentColor" />
+      播放全部
+    </button>
+  )
+
   return (
     <MusicPageShell>
-      <MusicHero
-        eyebrow="Playlist"
-        title={playlist.name}
-        subtitle={playlist.description || `${tracks.length} 首歌曲${updatedText ? ` · 更新于 ${updatedText}` : ''}`}
-        image={heroImage}
-        tone="purple"
-        action={(
-          <>
-            {tracks.length > 0 && (
-              <button className="am-action am-action--primary" onClick={() => player.playAll(tracks)}>
-                <Play size={17} fill="currentColor" />
-                播放全部
+      {!mobile && (
+        <MusicHero
+          eyebrow="Playlist"
+          title={playlist.name}
+          subtitle={playlist.description || `${tracks.length} 首歌曲${updatedText ? ` · 更新于 ${updatedText}` : ''}`}
+          image={heroImage}
+          tone="purple"
+          action={(
+            <>
+              {playAllAction}
+              <button className="am-action am-action--subtle" onClick={() => setMetaEditing(true)}>
+                <Pencil size={16} />
+                编辑歌单
               </button>
-            )}
-            <button className="am-action am-action--subtle" onClick={handleDelete}>
-              <Trash2 size={16} />
-              删除歌单
-            </button>
-          </>
-        )}
-      />
+              <button className="am-action am-action--subtle" onClick={handleDelete}>
+                <Trash2 size={16} />
+                删除歌单
+              </button>
+            </>
+          )}
+        />
+      )}
+
+      {mobile && (
+        <div className="playlist-detail-head">
+          <h1>{playlist.name}</h1>
+          <button type="button" className="playlist-detail-head__icon" onClick={() => setMetaEditing(true)} title="编辑歌单">
+            <Pencil size={17} />
+          </button>
+          <button type="button" className="playlist-detail-head__icon playlist-detail-head__icon--danger" onClick={handleDelete} title="删除歌单">
+            <Trash2 size={17} />
+          </button>
+        </div>
+      )}
 
       {tracks.length === 0 ? (
         <EmptyLibrary icon={<Music size={40} />} title="歌单是空的" subtitle="歌单已经创建并持久化保存，后续可以把歌曲加入到这里。" />
       ) : (
-        <MusicSection title="歌曲" icon={<Music size={22} />}>
+        <MusicSection title="歌曲" icon={<Music size={22} />} action={mobile ? playAllAction : undefined}>
           <div className={`playlist-editbar ${editing ? 'is-editing' : ''}`}>
             <div>
               <span>{editing ? `已选择 ${selectedIds.size} 首` : `${tracks.length} 首歌曲`}</span>
@@ -240,6 +307,18 @@ function PlaylistDetail({ playlistId }: { playlistId: string }) {
           </TrackList>
         </MusicSection>
       )}
+
+      <AnimatePresence>
+        {metaEditing && (
+          <PlaylistDialog
+            mode="edit"
+            initialName={playlist.name}
+            initialDescription={playlist.description || ''}
+            onClose={() => setMetaEditing(false)}
+            onSubmit={handleSaveMeta}
+          />
+        )}
+      </AnimatePresence>
     </MusicPageShell>
   )
 }

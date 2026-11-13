@@ -32,18 +32,48 @@ export interface LyricCandidate {
   image: string
 }
 
-type RawOiapiSong = Awaited<ReturnType<NonNullable<typeof window.electronAPI>['lyricsApi']['search']>>[number]
-
 function bridge() {
   return typeof window !== 'undefined' ? window.electronAPI?.lyricsApi : undefined
 }
 
+// WebView（Android/Capacitor）环境无 electronAPI，直接 fetch oiapi.net。
+// 该接口无 CORS 限制，浏览器可直连；超时对齐主进程的 9s。
+async function webFetchJson(url: string): Promise<any | null> {
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 9000)
+  try {
+    const resp = await fetch(url, { signal: ctrl.signal })
+    if (!resp.ok) return null
+    return await resp.json()
+  } catch {
+    return null
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+const OIAPI_QQ_LYRIC = 'https://www.oiapi.net/api/QQMusicLyric'
+
 async function oiSearch(keyword: string, limit = 10): Promise<LyricCandidate[]> {
   const api = bridge()
-  if (!api) return []
   try {
-    const rows = await api.search(keyword, 1, limit)
-    return rows.map(normalizeCandidate).filter(Boolean) as LyricCandidate[]
+    if (api) {
+      const rows = await api.search(keyword, 1, limit)
+      return rows.map(normalizeCandidate).filter(Boolean) as LyricCandidate[]
+    }
+    const q = String(keyword || '').trim()
+    if (!q) return []
+    const url = new URL(OIAPI_QQ_LYRIC)
+    url.searchParams.set('keyword', q)
+    url.searchParams.set('page', '1')
+    url.searchParams.set('limit', String(limit))
+    url.searchParams.set('type', 'json')
+    const json = await webFetchJson(url.toString())
+    const data = Array.isArray(json?.data) ? json.data : []
+    return data
+      .filter((item: any) => item && typeof item.name === 'string')
+      .map(normalizeCandidate)
+      .filter(Boolean) as LyricCandidate[]
   } catch {
     return []
   }
@@ -51,16 +81,27 @@ async function oiSearch(keyword: string, limit = 10): Promise<LyricCandidate[]> 
 
 async function oiGetLyric(id: string | number): Promise<string> {
   const api = bridge()
-  if (!api) return ''
   try {
-    const data = await api.get(id, 'lrc')
-    return data?.content || data?.conteng || ''
+    if (api) {
+      const data = await api.get(id, 'lrc')
+      return data?.content || data?.conteng || ''
+    }
+    const url = new URL(OIAPI_QQ_LYRIC)
+    url.searchParams.set('id', String(id))
+    url.searchParams.set('format', 'lrc')
+    url.searchParams.set('type', 'json')
+    const json = await webFetchJson(url.toString())
+    if (!json || json.code !== 1) return ''
+    if (typeof json.data === 'string') return json.data
+    if (json.data && typeof json.data === 'object') return json.data.content || json.data.conteng || ''
+    if (typeof json.message === 'string' && json.message.includes('[')) return json.message
+    return ''
   } catch {
     return ''
   }
 }
 
-function normalizeCandidate(item: RawOiapiSong): LyricCandidate | null {
+function normalizeCandidate(item: any): LyricCandidate | null {
   if (!item?.name || !item.id) return null
   return {
     id: String(item.id),

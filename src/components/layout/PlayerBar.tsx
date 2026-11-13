@@ -19,6 +19,7 @@ import {
 import { usePlayer, usePlayerProgress } from '@/contexts/PlayerContext'
 import { useNowPlaying } from '@/contexts/NowPlayingContext'
 import { useAddToPlaylist } from '@/contexts/AddToPlaylistContext'
+import { useIsMobile } from '@/hooks/useIsMobile'
 import PlayQueue from '@/components/PlayQueue'
 import PlayerSlider from '@/components/PlayerSlider'
 
@@ -41,8 +42,21 @@ export default function PlayerBar() {
   const { open } = useNowPlaying()
   const { openAddToPlaylist } = useAddToPlaylist()
   const [queueOpen, setQueueOpen] = useState(false)
+  const isMobile = useIsMobile()
   const trackDuration = duration || player.currentTrack?.duration || 0
   const remaining = Math.max(trackDuration - progress, 0)
+
+  if (isMobile) {
+    return (
+      <MobilePlayerBar
+        player={player}
+        progress={progress}
+        trackDuration={trackDuration}
+        onOpen={open}
+        onSeek={setProgress}
+      />
+    )
+  }
 
   return (
     <motion.div
@@ -556,4 +570,170 @@ function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60)
   const s = Math.floor(seconds % 60)
   return `${m}:${s.toString().padStart(2, '0')}`
+}
+
+// ===== 移动端精简播放条 =====
+// 上行：封面 + 标题 + 喜欢 + 上一首/播放/下一首；下行：进度条。
+// 音量、队列、歌单等次要操作留在沉浸播放页。
+
+function MobilePlayerBar({
+  player,
+  progress,
+  trackDuration,
+  onOpen,
+  onSeek,
+}: {
+  player: ReturnType<typeof usePlayer>
+  progress: number
+  trackDuration: number
+  onOpen: () => void
+  onSeek: (value: number) => void
+}) {
+  const sliderVars = {
+    '--track-bg': 'var(--player-track-bg)',
+    '--track-fill': 'var(--player-track-fill)',
+    '--track-thumb': 'var(--player-track-thumb)',
+  } as CSSProperties
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 18 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.38, ease: [0.22, 1, 0.36, 1] }}
+      style={{
+        width: '100%',
+        background: 'var(--player-bg)',
+        backdropFilter: 'blur(30px) saturate(155%)',
+        WebkitBackdropFilter: 'blur(30px) saturate(155%)',
+        borderTop: '1px solid var(--player-border)',
+        boxShadow: 'var(--player-shadow)',
+        color: 'var(--player-text)',
+        display: 'flex',
+        flexDirection: 'column',
+        padding: '8px 14px 10px',
+        gap: 6,
+        flexShrink: 0,
+        zIndex: 50,
+        fontFamily:
+          "'SF Pro Display', '-apple-system', BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif",
+      } as CSSProperties}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+        <motion.button
+          type="button"
+          onClick={() => { if (player.currentTrack) onOpen() }}
+          style={{
+            flex: 1,
+            minWidth: 0,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            padding: 4,
+            border: 'none',
+            borderRadius: 12,
+            background: 'transparent',
+            color: 'var(--player-text)',
+            textAlign: 'left',
+            cursor: player.currentTrack ? 'pointer' : 'default',
+            fontFamily: 'inherit',
+          }}
+        >
+          <div
+            style={{
+              width: 44,
+              height: 44,
+              borderRadius: 8,
+              background: 'var(--player-cover-bg)',
+              border: '1px solid var(--player-cover-border)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              overflow: 'hidden',
+              flexShrink: 0,
+            }}
+          >
+            {player.currentTrack?.coverUrl ? (
+              <img
+                src={player.currentTrack.coverUrl}
+                alt=""
+                loading="eager"
+                decoding="sync"
+                draggable={false}
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              />
+            ) : (
+              <Music size={18} strokeWidth={2} style={{ color: 'var(--player-subtle-text)' }} />
+            )}
+          </div>
+
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div
+              style={{
+                fontSize: 13,
+                fontWeight: 650,
+                lineHeight: 1.25,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {player.currentTrack?.title || '未在播放'}
+            </div>
+            <div
+              style={{
+                marginTop: 2,
+                color: 'var(--player-subtle-text)',
+                fontSize: 11,
+                fontWeight: 500,
+                lineHeight: 1.2,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {player.currentTrack?.artist || '搜索并播放音乐'}
+            </div>
+          </div>
+        </motion.button>
+
+        {player.currentTrack && (
+          <IconButton
+            active={Boolean(player.currentTrack.isLiked)}
+            ariaLabel="喜欢"
+            onClick={() => player.toggleLike(player.currentTrack!.id)}
+          >
+            <Heart size={18} fill={player.currentTrack.isLiked ? 'currentColor' : 'none'} />
+          </IconButton>
+        )}
+
+        <TransportButton onClick={player.prev} ariaLabel="上一首">
+          <SkipBack size={20} />
+        </TransportButton>
+        <PlayButton
+          isPlaying={player.isPlaying}
+          loading={player.loadingAudio}
+          onClick={player.togglePlay}
+        />
+        <TransportButton onClick={player.next} ariaLabel="下一首">
+          <SkipForward size={20} />
+        </TransportButton>
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, ...sliderVars } as CSSProperties}>
+        <TimeLabel align="right">{formatTime(progress)}</TimeLabel>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <PlayerSlider
+            ariaLabel="播放进度"
+            value={progress}
+            max={trackDuration}
+            onChange={onSeek}
+            disabled={trackDuration <= 0}
+            formatValue={formatTime}
+            variant="progress"
+          />
+        </div>
+        <TimeLabel>{trackDuration > 0 ? formatTime(trackDuration) : '0:00'}</TimeLabel>
+      </div>
+    </motion.div>
+  )
 }

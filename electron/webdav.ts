@@ -68,12 +68,13 @@ function davFetch(url: string, init: { method: string; headers?: Record<string, 
 }
 
 // PUT 不会自动创建父集合（WebDAV 返回 409），故先 MKCOL；已存在(405)/已建(201) 均视为成功
-async function ensureDir(): Promise<void> {
+async function ensureDir(): Promise<WebdavResult | null> {
   const dirUrl = `${joinUrl(config!.url, SYNC_DIR)}/`
-  try {
-    await davFetch(dirUrl, { method: 'MKCOL' })
-  } catch {
-    /* 目录可能已存在或服务端不支持显式 MKCOL，交由 PUT 暴露真实错误 */
+  const res = await davFetch(dirUrl, { method: 'MKCOL' })
+  if (res.ok || res.status === 405) return null
+  return {
+    ok: false, status: res.status, etag: null, content: null,
+    message: res.status === 401 ? '认证失败' : `创建同步目录失败：HTTP ${res.status}`,
   }
 }
 
@@ -99,7 +100,13 @@ async function testConnection(): Promise<{ ok: boolean; message: string }> {
 async function get(relPath: string): Promise<WebdavResult> {
   if (!config) return { ok: false, status: 0, etag: null, content: null, message: '未配置' }
   try {
-    const res = await davFetch(joinUrl(config.url, SYNC_DIR, relPath), { method: 'GET' })
+    const url = joinUrl(config.url, SYNC_DIR, relPath)
+    let res = await davFetch(url, { method: 'GET' })
+    if (res.status === 409) {
+      const failure = await ensureDir()
+      if (failure) return failure
+      res = await davFetch(url, { method: 'GET' })
+    }
     if (res.status === 404) return { ok: true, status: 404, etag: null, content: null } // 远端尚无文件
     if (res.status === 401) return { ok: false, status: 401, etag: null, content: null, message: '认证失败' }
     if (res.status >= 200 && res.status < 300) {
@@ -114,7 +121,8 @@ async function get(relPath: string): Promise<WebdavResult> {
 async function put(relPath: string, content: string, etag?: string): Promise<WebdavResult> {
   if (!config) return { ok: false, status: 0, etag: null, content: null, message: '未配置' }
   try {
-    await ensureDir()
+    const failure = await ensureDir()
+    if (failure) return failure
     const headers: Record<string, string> = { 'Content-Type': 'application/json; charset=utf-8' }
     if (etag) headers['If-Match'] = etag // 乐观并发：远端被他端改过则 412
     const res = await davFetch(joinUrl(config.url, SYNC_DIR, relPath), { method: 'PUT', headers, body: content })

@@ -2,13 +2,15 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import {
-  ChevronDown, Play, Pause, SkipBack, SkipForward, Shuffle, Repeat,
-  Heart, Volume2, VolumeX, Search, Music, Loader2, Maximize2, Minimize2, X, MessageCircle, ExternalLink, ThumbsUp, RefreshCw,
+  ChevronDown, Play, Pause, SkipBack, SkipForward, Shuffle, Repeat, Repeat1, ArrowRight,
+  Heart, Volume2, VolumeX, Search, Music, Loader2, X, MessageCircle, ExternalLink, ThumbsUp, RefreshCw,
+  Maximize2, Minimize2,
 } from 'lucide-react'
 import { usePlayer, usePlayerProgress } from '@/contexts/PlayerContext'
 import { useNowPlaying } from '@/contexts/NowPlayingContext'
 import { useAppSettings } from '@/hooks/useAppSettings'
 import { useLyrics } from '@/hooks/useLyrics'
+import { isMobilePlatform } from '@/hooks/useIsMobile'
 import PlayerSlider from '@/components/PlayerSlider'
 import LyricsView from '@/components/LyricsView'
 import type { LyricCandidate } from '@/services/lyrics'
@@ -76,8 +78,38 @@ export default function NowPlaying() {
     }, 180)
   }
 
+  // ===== 移动端歌词模式：歌词替换封面显示（点封面切换） =====
+  const [lyricsMode, setLyricsMode] = useState(false)
+  const mobile = isMobilePlatform()
+
+  // ===== 移动端播放模式：随机+循环合并按钮 =====
+  // 循环：顺序 → 随机 → 列表循环 → 单曲循环 → 顺序，切换时 toast 提示
+  const cyclePlayMode = () => {
+    let message: string
+    if (!player.isShuffled && player.repeatMode === 'none') {
+      player.setIsShuffled(true)
+      message = '随机播放'
+    } else if (player.isShuffled) {
+      player.setIsShuffled(false)
+      player.setRepeatMode('all')
+      message = '列表循环'
+    } else if (player.repeatMode === 'all') {
+      player.setRepeatMode('one')
+      message = '单曲循环'
+    } else {
+      player.setRepeatMode('none')
+      message = '顺序播放'
+    }
+    player.showToast(message)
+  }
+
   const closeToTray = () => {
-    window.electronAPI?.close()
+    if (window.electronAPI?.close) {
+      window.electronAPI.close()
+    } else {
+      // WebView 无托盘可退：与左上角一致，收起播放页
+      close()
+    }
   }
 
   const openArtistSpace = () => {
@@ -88,7 +120,12 @@ export default function NowPlaying() {
 
   const openSourceVideo = () => {
     if (!track?.bvid) return
-    window.electronAPI?.openExternal?.(`https://www.bilibili.com/video/${track.bvid}`)
+    if (window.electronAPI?.openExternal) {
+      window.electronAPI.openExternal(`https://www.bilibili.com/video/${track.bvid}`)
+    } else {
+      // WebView 环境无 electronAPI：直接导航（shouldOverrideUrlLoading 会交给系统浏览器）
+      window.open(`https://www.bilibili.com/video/${track.bvid}`, '_blank')
+    }
   }
 
   const loadComments = useCallback(async (page = 1) => {
@@ -160,7 +197,7 @@ export default function NowPlaying() {
       {expanded && track && (
         <motion.div
           key="now-playing"
-          className={`now-playing ${fullscreen ? 'is-fullscreen' : ''} ${fullscreen && !controlsVisible ? 'is-immersive-idle' : ''}`}
+          className={`now-playing ${mobile ? 'now-playing--mobile' : ''} ${fullscreen ? 'is-fullscreen' : ''} ${fullscreen && !controlsVisible ? 'is-immersive-idle' : ''}`}
           initial={{ opacity: 0, scale: 1.015 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.985 }}
@@ -171,38 +208,43 @@ export default function NowPlaying() {
             <span />
             <span />
           </div>
-          <div className="now-playing-bg">
-            {track.coverUrl && (
-              <>
-                <motion.div
-                  className="now-playing-bg__cover"
-                  style={{ backgroundImage: `url(${track.coverUrl})` }}
-                  initial={{ opacity: 0, scale: 1.12 }}
-                  animate={{ opacity: 0.72, scale: [1.16, 1.25, 1.18] }}
-                  transition={{ opacity: { duration: 0.8 }, scale: { duration: 22, repeat: Infinity, ease: 'easeInOut' } }}
-                />
-                <motion.div
-                  className="now-playing-bg__disc"
-                  style={{ backgroundImage: `url(${track.coverUrl})` }}
-                  animate={{ rotate: player.isPlaying ? 360 : 0 }}
-                  transition={{ duration: 34, repeat: player.isPlaying ? Infinity : 0, ease: 'linear' }}
-                />
-              </>
-            )}
-          </div>
+          {/* 移动端：纯色背景，不渲染模糊放大封面（省内存）；桌面端保留沉浸背景 */}
+          {!mobile && (
+            <div className="now-playing-bg">
+              {track.coverUrl && (
+                <>
+                  <motion.div
+                    className="now-playing-bg__cover"
+                    style={{ backgroundImage: `url(${track.coverUrl})` }}
+                    initial={{ opacity: 0, scale: 1.12 }}
+                    animate={{ opacity: 0.72, scale: [1.16, 1.25, 1.18] }}
+                    transition={{ opacity: { duration: 0.8 }, scale: { duration: 22, repeat: Infinity, ease: 'easeInOut' } }}
+                  />
+                  <motion.div
+                    className="now-playing-bg__disc"
+                    style={{ backgroundImage: `url(${track.coverUrl})` }}
+                    animate={{ rotate: player.isPlaying ? 360 : 0 }}
+                    transition={{ duration: 34, repeat: player.isPlaying ? Infinity : 0, ease: 'linear' }}
+                  />
+                </>
+              )}
+            </div>
+          )}
 
           <header className="now-playing-top now-playing-ui now-playing-ui--top" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}>
-            <motion.button
-              type="button"
-              className="now-playing-close"
-              onClick={close}
-              title="收起 (Esc)"
-              style={noDrag}
-              whileHover={{ y: 1, backgroundColor: 'rgba(255,255,255,0.18)' }}
-              whileTap={{ scale: 0.92 }}
-            >
-              <ChevronDown size={21} />
-            </motion.button>
+            {!mobile && (
+              <motion.button
+                type="button"
+                className="now-playing-close"
+                onClick={close}
+                title="收起 (Esc)"
+                style={noDrag}
+                whileHover={{ y: 1, backgroundColor: 'rgba(255,255,255,0.18)' }}
+                whileTap={{ scale: 0.92 }}
+              >
+                <ChevronDown size={21} />
+              </motion.button>
+            )}
             <div className="now-playing-top__actions" style={noDrag}>
               <motion.button
                 type="button"
@@ -214,21 +256,23 @@ export default function NowPlaying() {
               >
                 <ExternalLink size={18} />
               </motion.button>
-              <motion.button
-                type="button"
-                className="now-playing-close"
-                onClick={toggleFullscreen}
-                title={fullscreen ? '退出全屏' : '全屏'}
-                whileHover={{ y: 1, backgroundColor: 'rgba(255,255,255,0.18)' }}
-                whileTap={{ scale: 0.92 }}
-              >
-                {fullscreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
-              </motion.button>
+              {!mobile && (
+                <motion.button
+                  type="button"
+                  className="now-playing-close"
+                  onClick={toggleFullscreen}
+                  title={fullscreen ? '退出全屏' : '全屏'}
+                  whileHover={{ y: 1, backgroundColor: 'rgba(255,255,255,0.18)' }}
+                  whileTap={{ scale: 0.92 }}
+                >
+                  {fullscreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
+                </motion.button>
+              )}
               <motion.button
                 type="button"
                 className="now-playing-close"
                 onClick={closeToTray}
-                title="关闭到托盘"
+                title="关闭播放页"
                 whileHover={{ y: 1, backgroundColor: 'rgba(255,255,255,0.18)' }}
                 whileTap={{ scale: 0.92 }}
               >
@@ -244,24 +288,37 @@ export default function NowPlaying() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ ...spring, delay: 0.08 }}
             >
-              <div className="now-playing-cover-wrap">
-                <motion.div
-                  className="now-playing-cover-glow"
-                  animate={{ opacity: player.isPlaying ? [0.35, 0.72, 0.4] : 0.26 }}
-                  transition={{ duration: 3.8, repeat: Infinity, ease: 'easeInOut' }}
-                />
-                <motion.img
-                  layoutId="np-cover"
-                  className="now-playing-cover"
-                  src={track.coverUrl}
-                  alt={track.title}
-                  loading="eager"
-                  decoding="sync"
-                  draggable={false}
-                  initial={false}
-                  animate={{ opacity: 1, scale: 1, rotateX: 0 }}
-                  transition={spring}
-                />
+              <div
+                className="now-playing-cover-wrap"
+                {...(mobile ? { onClick: () => setLyricsMode(v => !v) } : {})}
+              >
+                {mobile && lyricsMode ? (
+                  <div className="now-playing-lyrics-inline">
+                    <LyricsPanel lyrics={lyrics} track={track} onSeek={setProgress} currentTime={progress} />
+                  </div>
+                ) : (
+                  <>
+                    {!mobile && (
+                      <motion.div
+                        className="now-playing-cover-glow"
+                        animate={{ opacity: player.isPlaying ? [0.35, 0.72, 0.4] : 0.26 }}
+                        transition={{ duration: 3.8, repeat: Infinity, ease: 'easeInOut' }}
+                      />
+                    )}
+                    <motion.img
+                      layoutId="np-cover"
+                      className="now-playing-cover"
+                      src={track.coverUrl}
+                      alt={track.title}
+                      loading="eager"
+                      decoding="sync"
+                      draggable={false}
+                      initial={false}
+                      animate={{ opacity: 1, scale: 1, rotateX: 0 }}
+                      transition={spring}
+                    />
+                  </>
+                )}
               </div>
 
               <div className="now-playing-meta">
@@ -278,16 +335,32 @@ export default function NowPlaying() {
                     {track.artist}
                   </motion.button>
                 </div>
-                <motion.button
-                  type="button"
-                  className={`now-playing-heart now-playing-ui ${track.isLiked ? 'is-liked' : ''}`}
-                  onClick={() => player.toggleLike(track.id)}
-                  whileHover={{ scale: 1.08 }}
-                  whileTap={{ scale: 0.88 }}
-                  title="喜欢"
-                >
-                  <Heart size={22} fill={track.isLiked ? 'currentColor' : 'none'} />
-                </motion.button>
+                <div className="now-playing-meta__actions">
+                  {mobile && (
+                    <motion.button
+                      type="button"
+                      className={`now-playing-heart now-playing-ui ${commentsOpen ? 'is-liked' : ''}`}
+                      onClick={toggleComments}
+                      whileHover={{ scale: 1.08 }}
+                      whileTap={{ scale: 0.88 }}
+                      title="查看评论"
+                    >
+                      <MessageCircle size={22} />
+                    </motion.button>
+                  )}
+                  {!mobile && (
+                    <motion.button
+                      type="button"
+                      className={`now-playing-heart now-playing-ui ${track.isLiked ? 'is-liked' : ''}`}
+                      onClick={() => player.toggleLike(track.id)}
+                      whileHover={{ scale: 1.08 }}
+                      whileTap={{ scale: 0.88 }}
+                      title="喜欢"
+                    >
+                      <Heart size={22} fill={track.isLiked ? 'currentColor' : 'none'} />
+                    </motion.button>
+                  )}
+                </div>
               </div>
 
               <div className="now-playing-progress now-playing-ui" style={sliderTheme}>
@@ -307,66 +380,112 @@ export default function NowPlaying() {
               </div>
 
               <div className="now-playing-controls now-playing-ui now-playing-ui--controls">
-                <div className="now-playing-volume-popover" style={sliderTheme}>
-                  <motion.button
-                    type="button"
-                    className="now-playing-volume-trigger"
-                    onClick={() => player.setIsMuted(!player.isMuted)}
-                    title={player.isMuted ? '取消静音' : '静音'}
-                    whileHover={{ scale: 1.08, y: -1 }}
-                    whileTap={{ scale: 0.9 }}
-                  >
-                    {player.isMuted || player.volume <= 0 ? <VolumeX size={20} /> : <Volume2 size={20} />}
-                  </motion.button>
-                  <div className="now-playing-volume-panel">
-                    <PlayerSlider
-                      ariaLabel="音量"
-                      value={player.isMuted ? 0 : player.volume}
-                      max={100}
-                      step={5}
-                      onChange={(v) => { player.setVolume(Math.round(v)); if (player.isMuted && v > 0) player.setIsMuted(false) }}
-                      variant="volume"
-                    />
+                {!mobile && (
+                  <div className="now-playing-volume-popover" style={sliderTheme}>
+                    <motion.button
+                      type="button"
+                      className="now-playing-volume-trigger"
+                      onClick={() => player.setIsMuted(!player.isMuted)}
+                      title={player.isMuted ? '取消静音' : '静音'}
+                      whileHover={{ scale: 1.08, y: -1 }}
+                      whileTap={{ scale: 0.9 }}
+                    >
+                      {player.isMuted || player.volume <= 0 ? <VolumeX size={20} /> : <Volume2 size={20} />}
+                    </motion.button>
+                    <div className="now-playing-volume-panel">
+                      <PlayerSlider
+                        ariaLabel="音量"
+                        value={player.isMuted ? 0 : player.volume}
+                        max={100}
+                        step={5}
+                        onChange={(v) => { player.setVolume(Math.round(v)); if (player.isMuted && v > 0) player.setIsMuted(false) }}
+                        variant="volume"
+                      />
+                    </div>
                   </div>
-                </div>
+                )}
                 <div className="now-playing-control-cluster">
-                  <RoundIcon active={player.isShuffled} onClick={() => player.setIsShuffled(!player.isShuffled)} title="随机播放">
-                    <Shuffle size={20} />
-                  </RoundIcon>
-                  <RoundIcon onClick={player.prev} title="上一首">
-                    <SkipBack size={27} />
-                  </RoundIcon>
-                  <motion.button
-                    type="button"
-                    className="now-playing-play"
-                    onClick={player.togglePlay}
-                    disabled={player.loadingAudio}
-                    whileHover={{ scale: player.loadingAudio ? 1 : 1.045 }}
-                    whileTap={{ scale: player.loadingAudio ? 1 : 0.94 }}
-                  >
-                    {player.loadingAudio
-                      ? <Loader2 size={27} className="spin" />
-                      : player.isPlaying ? <Pause size={30} fill="currentColor" /> : <Play size={30} fill="currentColor" style={{ marginLeft: 3 }} />}
-                  </motion.button>
-                  <RoundIcon onClick={player.next} title="下一首">
-                    <SkipForward size={27} />
-                  </RoundIcon>
-                  <RoundIcon
-                    active={player.repeatMode !== 'none'}
-                    onClick={() => {
-                      const modes = ['none', 'all', 'one'] as const
-                      player.setRepeatMode(modes[(modes.indexOf(player.repeatMode) + 1) % 3])
-                    }}
-                    title="循环模式"
-                  >
-                    <span className="now-playing-repeat">
-                      <Repeat size={20} />
-                      {player.repeatMode === 'one' && <span>1</span>}
-                    </span>
-                  </RoundIcon>
-                  <RoundIcon active={commentsOpen} onClick={toggleComments} title="查看评论">
-                    <MessageCircle size={20} />
-                  </RoundIcon>
+                  {mobile ? (
+                    // 移动端 5 键：模式 / 上一首 / 播放(居中) / 下一首 / 喜欢
+                    // 模式按钮四态：顺序→随机→列表循环→单曲循环，图标独立
+                    <>
+                      <RoundIcon
+                        active={player.isShuffled || player.repeatMode !== 'none'}
+                        onClick={cyclePlayMode}
+                        title="播放模式"
+                      >
+                        {player.isShuffled ? <Shuffle size={20} />
+                          : player.repeatMode === 'one' ? <Repeat1 size={20} />
+                          : player.repeatMode === 'all' ? <Repeat size={20} />
+                          : <ArrowRight size={20} />}
+                      </RoundIcon>
+                      <RoundIcon onClick={player.prev} title="上一首">
+                        <SkipBack size={27} />
+                      </RoundIcon>
+                      <motion.button
+                        type="button"
+                        className="now-playing-play"
+                        onClick={player.togglePlay}
+                        disabled={player.loadingAudio}
+                        whileHover={{ scale: player.loadingAudio ? 1 : 1.045 }}
+                        whileTap={{ scale: player.loadingAudio ? 1 : 0.94 }}
+                      >
+                        {player.loadingAudio
+                          ? <Loader2 size={27} className="spin" />
+                          : player.isPlaying ? <Pause size={30} fill="currentColor" /> : <Play size={30} fill="currentColor" style={{ marginLeft: 3 }} />}
+                      </motion.button>
+                      <RoundIcon onClick={player.next} title="下一首">
+                        <SkipForward size={27} />
+                      </RoundIcon>
+                      <RoundIcon
+                        active={Boolean(track.isLiked)}
+                        onClick={() => player.toggleLike(track.id)}
+                        title={track.isLiked ? '取消喜欢' : '喜欢'}
+                      >
+                        <Heart size={20} fill={track.isLiked ? 'currentColor' : 'none'} />
+                      </RoundIcon>
+                    </>
+                  ) : (
+                    <>
+                      <RoundIcon active={player.isShuffled} onClick={() => player.setIsShuffled(!player.isShuffled)} title="随机播放">
+                        <Shuffle size={20} />
+                      </RoundIcon>
+                      <RoundIcon onClick={player.prev} title="上一首">
+                        <SkipBack size={27} />
+                      </RoundIcon>
+                      <motion.button
+                        type="button"
+                        className="now-playing-play"
+                        onClick={player.togglePlay}
+                        disabled={player.loadingAudio}
+                        whileHover={{ scale: player.loadingAudio ? 1 : 1.045 }}
+                        whileTap={{ scale: player.loadingAudio ? 1 : 0.94 }}
+                      >
+                        {player.loadingAudio
+                          ? <Loader2 size={27} className="spin" />
+                          : player.isPlaying ? <Pause size={30} fill="currentColor" /> : <Play size={30} fill="currentColor" style={{ marginLeft: 3 }} />}
+                      </motion.button>
+                      <RoundIcon onClick={player.next} title="下一首">
+                        <SkipForward size={27} />
+                      </RoundIcon>
+                      <RoundIcon
+                        active={player.repeatMode !== 'none'}
+                        onClick={() => {
+                          const modes = ['none', 'all', 'one'] as const
+                          player.setRepeatMode(modes[(modes.indexOf(player.repeatMode) + 1) % 3])
+                        }}
+                        title="循环模式"
+                      >
+                        <span className="now-playing-repeat">
+                          <Repeat size={20} />
+                          {player.repeatMode === 'one' && <span>1</span>}
+                        </span>
+                      </RoundIcon>
+                      <RoundIcon active={commentsOpen} onClick={toggleComments} title="查看评论">
+                        <MessageCircle size={20} />
+                      </RoundIcon>
+                    </>
+                  )}
                 </div>
               </div>
             </motion.section>
