@@ -176,6 +176,11 @@ export async function extractAudio(
   return extractAudioFromVideo(bvid, fallback)
 }
 
+export async function extractAudioPart(bvid: string, cid: number) {
+  const api = await import('@/services/bilibiliApi')
+  return api.extractAudioPart(bvid, cid)
+}
+
 // ===== 下载音频 =====
 
 export async function downloadAudio(audioUrl: string, filename: string): Promise<{ filePath: string; size: number }> {

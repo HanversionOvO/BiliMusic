@@ -1,5 +1,9 @@
 import { useCallback, useRef, useState } from 'react'
 
+// 触摸设备：滑条命中区扩大并阻止事件冒泡（误触切歌修复）
+const isTouchDevice = typeof window !== 'undefined'
+  && ('ontouchstart' in window || navigator.maxTouchPoints > 0)
+
 export interface PlayerSliderProps {
   ariaLabel: string
   value: number
@@ -31,9 +35,12 @@ export default function PlayerSlider({
   const trackRef = useRef<HTMLDivElement>(null)
   const [isHovered, setIsHovered] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
+  const pointerIdRef = useRef<number | null>(null)
+  const draftRef = useRef<number | null>(null)
+  const [draftValue, setDraftValue] = useState<number | null>(null)
   const safeMax = Math.max(max, min)
   const valueRange = safeMax - min
-  const clampedValue = clamp(value, min, safeMax)
+  const clampedValue = clamp(draftValue ?? value, min, safeMax)
   const percent = valueRange > 0 ? ((clampedValue - min) / valueRange) * 100 : 0
   const isActive = isHovered || isDragging
   const keyboardStep = step ?? Math.max(valueRange / 100, 1)
@@ -43,15 +50,31 @@ export default function PlayerSlider({
     const rect = trackRef.current?.getBoundingClientRect()
     if (!rect || rect.width <= 0) return
     const nextPercent = clamp((clientX - rect.left) / rect.width, 0, 1)
-    onChange(min + nextPercent * valueRange)
-  }, [disabled, min, onChange, valueRange])
+    const nextValue = min + nextPercent * valueRange
+    draftRef.current = nextValue
+    if (variant === 'progress') setDraftValue(nextValue)
+    else onChange(nextValue)
+  }, [disabled, min, onChange, valueRange, variant])
 
   const handlePointerUp = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (pointerIdRef.current !== event.pointerId) return
+    event.stopPropagation()
+    pointerIdRef.current = null
+    // 进度只在松手时提交；取消触摸或失去捕获时保留原播放位置。
+    if (event.type === 'pointerup' && !disabled && variant === 'progress') {
+      const rect = trackRef.current?.getBoundingClientRect()
+      const target = rect && rect.width > 0
+        ? min + clamp((event.clientX - rect.left) / rect.width, 0, 1) * valueRange
+        : draftRef.current
+      if (target !== null) onChange(target)
+    }
+    draftRef.current = null
+    setDraftValue(null)
     setIsDragging(false)
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId)
     }
-  }, [])
+  }, [disabled, min, onChange, valueRange, variant])
 
   return (
     <div
@@ -66,17 +89,24 @@ export default function PlayerSlider({
       data-slider={variant}
       tabIndex={disabled ? -1 : 0}
       onPointerDown={(event) => {
-        if (disabled) return
+        if (disabled || pointerIdRef.current !== null || event.button !== 0) return
+        // 阻止触摸事件冒泡到歌曲行/封面等可点区域（移动端误触切歌）
+        event.stopPropagation()
         event.preventDefault()
         event.currentTarget.setPointerCapture(event.pointerId)
+        pointerIdRef.current = event.pointerId
         setIsDragging(true)
         updateFromClientX(event.clientX)
       }}
       onPointerMove={(event) => {
-        if (isDragging) updateFromClientX(event.clientX)
+        if (pointerIdRef.current === event.pointerId) {
+          event.stopPropagation()
+          updateFromClientX(event.clientX)
+        }
       }}
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerUp}
+      onLostPointerCapture={handlePointerUp}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       onKeyDown={(event) => {
@@ -109,6 +139,8 @@ export default function PlayerSlider({
         flex: width === '100%' ? 1 : undefined,
         width,
         height: 20,
+        // 触摸设备命中区上下扩展（视觉不变）：::before 撑开可点区域
+        ...(isTouchDevice ? { height: 44, margin: '-12px 0' } : {}),
         position: 'relative',
         display: 'flex',
         alignItems: 'center',
@@ -117,6 +149,8 @@ export default function PlayerSlider({
         touchAction: 'none',
         outline: 'none',
       }}
+      onTouchStart={(e) => e.stopPropagation()}
+      onTouchMove={(e) => e.stopPropagation()}
     >
       <div
         style={{
