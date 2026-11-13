@@ -425,7 +425,9 @@ export interface VideoStream {
 export interface PlayUrlData {
   quality: number
   format: string
+  timelength?: number // 当前 cid 的实际时长，单位毫秒；不是所有分 P 的总时长。
   dash: {
+    duration?: number
     audio: AudioStream[]
     video: VideoStream[]
   }
@@ -579,6 +581,30 @@ export interface TrackSource {
   audioUrl: string
   audioQuality: number
   audioMimeType: string
+  parts?: VideoPage[] // 普通多 P 合集的完整时间轴，音频 URL 只对应第一个 cid。
+}
+
+export interface PartAudioSource {
+  audioUrl: string
+  duration: number
+  audioQuality: number
+  audioMimeType: string
+}
+
+function audioSourceFromPlayData(playData: PlayUrlData): PartAudioSource {
+  const bestAudio = [...(playData.dash?.audio || [])].sort((a, b) => b.bandwidth - a.bandwidth)[0]
+  if (!bestAudio) throw new Error('No audio stream available')
+  return {
+    audioUrl: bestAudio.baseUrl,
+    duration: (playData.timelength || 0) / 1000 || playData.dash.duration || 0,
+    audioQuality: bestAudio.quality,
+    audioMimeType: bestAudio.mimeType,
+  }
+}
+
+/** 合集跳转或连续播放时，只提取目标 cid，避免反复请求整个视频详情。 */
+export async function extractAudioPart(bvid: string, cid: number): Promise<PartAudioSource> {
+  return audioSourceFromPlayData(await getPlayUrl(bvid, cid))
 }
 
 /**
@@ -612,9 +638,14 @@ export async function extractAudioFromVideo(
   try {
     const detail = await getVideoDetail(bvid)
     const playData = await getPlayUrl(bvid, detail.cid)
-    const audioUrl = getBestAudioUrl(playData)
-
-    const bestAudio = [...playData.dash.audio].sort((a, b) => b.bandwidth - a.bandwidth)[0]
+    const audioSource = audioSourceFromPlayData(playData)
+    // 交互视频可能含有零时长分支，不能当作普通连续合集处理。
+    const parts = detail.pages?.length > 1 && detail.pages.every(page => page.duration > 0)
+      ? detail.pages
+      : undefined
+    const partDuration = audioSource.duration
+      || detail.pages?.find(page => page.cid === detail.cid)?.duration
+      || (detail.videos <= 1 ? detail.duration : 0)
 
     return {
       bvid: detail.bvid,
@@ -623,10 +654,9 @@ export async function extractAudioFromVideo(
       title: detail.title,
       artist: detail.owner.name,
       coverUrl: toHttpsUrl(detail.pic),
-      duration: detail.duration,
-      audioUrl,
-      audioQuality: bestAudio.quality,
-      audioMimeType: bestAudio.mimeType,
+      ...audioSource,
+      duration: parts ? parts.reduce((total, part) => total + part.duration, 0) : partDuration,
+      parts,
     }
   } catch (e) {
     if (fallback?.aid && fallback?.cid) {
@@ -649,9 +679,7 @@ async function extractAudioByAvidCid(
   const playData = await biliFetch<PlayUrlData>('/x/player/playurl', {
     params: { avid: aid, cid, qn: 0, fnver: 0, fnval: 16, fourk: 1 },
   })
-  const audioStreams = playData.dash?.audio
-  if (!audioStreams?.length) throw new Error('No audio stream available')
-  const bestAudio = [...audioStreams].sort((a, b) => b.bandwidth - a.bandwidth)[0]
+  const audioSource = audioSourceFromPlayData(playData)
 
   return {
     bvid,
@@ -660,10 +688,7 @@ async function extractAudioByAvidCid(
     title: '',
     artist: '',
     coverUrl: '',
-    duration: 0,
-    audioUrl: bestAudio.baseUrl,
-    audioQuality: bestAudio.quality,
-    audioMimeType: bestAudio.mimeType,
+    ...audioSource,
   }
 }
 

@@ -1,6 +1,8 @@
 import { createContext, useContext, useState, useCallback, useMemo, useRef, useEffect, type ReactNode } from 'react'
 import type { Track, RepeatMode } from '@/types'
-import { extractAudio } from '@/services/api'
+import { extractAudio, extractAudioPart } from '@/services/api'
+import type { PartAudioSource, TrackSource } from '@/services/bilibiliApi'
+import { locatePlaybackPosition, timelineDuration } from '@/utils/playbackTimeline'
 import { addRecentTrack, toggleFavoriteTrack, loadFavoriteTracks } from '@/utils/storage'
 import { useAppSettings } from '@/hooks/useAppSettings'
 
@@ -158,6 +160,12 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const progressRef = useRef(progress)
   const durationRef = useRef(duration)
+  const pendingSeekRef = useRef<number | null>(null)
+  const sourceRef = useRef<TrackSource | null>(null)
+  const partIndexRef = useRef(0)
+  const partOffsetRef = useRef(0)
+  const partRequestRef = useRef(0)
+  const partLoadingRef = useRef(false)
 
   const showToast = useCallback((msg: string) => {
     setToast(msg)
@@ -171,28 +179,64 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     audio.volume = volume / 100
     audioRef.current = audio
 
-    const onTimeUpdate = () => setProgress(audio.currentTime)
-    const onDuration = () => setDuration(audio.duration || 0)
+    const onTimeUpdate = () => {
+      if (!partLoadingRef.current && pendingSeekRef.current === null && !audio.seeking) {
+        setProgress(partOffsetRef.current + audio.currentTime)
+      }
+    }
+    const onDuration = () => {
+      if (partLoadingRef.current) return
+      const parts = sourceRef.current?.parts
+      const nextDuration = parts ? timelineDuration(parts) : audio.duration
+      if (Number.isFinite(nextDuration) && nextDuration > 0) {
+        durationRef.current = nextDuration
+        setDuration(nextDuration)
+      }
+    }
+    const onSeekReady = () => {
+      if (partLoadingRef.current || pendingSeekRef.current === null || audio.seeking || audio.readyState < 2) return
+      pendingSeekRef.current = null
+      setProgress(partOffsetRef.current + audio.currentTime)
+      // 远端 Range 数据就绪后再检查续播；以最新播放意图为准，尊重等待期间的暂停。
+      if (shouldAutoplayRef.current && audio.paused) {
+        void audio.play().catch(() => {
+          if (audioRef.current === audio && shouldAutoplayRef.current) {
+            setIsPlaying(false)
+            showToast('跳转后播放失败，请点击播放重试')
+          }
+        })
+      }
+    }
     const onEnded = () => { /* handled in playTrack */ }
     const onError = () => {
+      if (partLoadingRef.current) return
+      console.error('[BiliMusic audio error]', audio.error?.code, audio.error?.message,
+        { readyState: audio.readyState, networkState: audio.networkState, currentTime: audio.currentTime })
+      pendingSeekRef.current = null
       setLoadingAudio(false)
       setIsPlaying(false)
     }
 
     audio.addEventListener('timeupdate', onTimeUpdate)
     audio.addEventListener('loadedmetadata', onDuration)
+    audio.addEventListener('durationchange', onDuration)
+    audio.addEventListener('seeked', onSeekReady)
+    audio.addEventListener('canplay', onSeekReady)
     audio.addEventListener('ended', onEnded)
     audio.addEventListener('error', onError)
 
     return () => {
       audio.removeEventListener('timeupdate', onTimeUpdate)
       audio.removeEventListener('loadedmetadata', onDuration)
+      audio.removeEventListener('durationchange', onDuration)
+      audio.removeEventListener('seeked', onSeekReady)
+      audio.removeEventListener('canplay', onSeekReady)
       audio.removeEventListener('ended', onEnded)
       audio.removeEventListener('error', onError)
       audio.pause()
       audio.src = ''
     }
-  }, [])
+  }, [showToast])
 
   // volume 同步到 audio
   useEffect(() => {
@@ -211,7 +255,62 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     durationRef.current = duration
   }, [duration])
 
+  // 合集内换分 P：全局进度不变，音频元素只接收目标分 P 的局部时间。
+  // 请求序号防止快速连续跳转、切歌后旧请求覆盖最新音源。
+  const loadPart = useCallback(async (partIndex: number, partProgress: number, initialSource?: PartAudioSource) => {
+    const source = sourceRef.current
+    const audio = audioRef.current
+    if (!source || !audio) return
+    const request = ++partRequestRef.current
+    const parts = source.parts
+    const offset = parts ? timelineDuration(parts.slice(0, partIndex)) : 0
+    const isCurrent = () => request === partRequestRef.current && sourceRef.current === source
+    partLoadingRef.current = true
+    pendingSeekRef.current = offset + partProgress
+    setProgress(offset + partProgress)
+    setLoadingAudio(true)
+    audio.pause()
+    try {
+      const partSource = initialSource || await extractAudioPart(source.bvid, parts?.[partIndex].cid ?? source.cid)
+      if (!isCurrent()) return
+      partIndexRef.current = partIndex
+      partOffsetRef.current = offset
+      audio.src = partSource.audioUrl
+      audio.currentTime = Math.min(Math.max(partProgress, 0), partSource.duration || partProgress)
+      partLoadingRef.current = false
+      if (shouldAutoplayRef.current) {
+        await audio.play()
+        if (isCurrent()) setIsPlaying(shouldAutoplayRef.current && !audio.paused)
+      } else {
+        setIsPlaying(false)
+      }
+    } catch (error) {
+      if (isCurrent()) {
+        console.error('[BiliMusic part load failed]', error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+          { partIndex, partProgress, mediaError: audio.error?.code, readyState: audio.readyState, networkState: audio.networkState })
+        pendingSeekRef.current = null
+        // 等待期间用户主动暂停会取消 play()，这不属于加载失败。
+        if (shouldAutoplayRef.current || partLoadingRef.current || audio.error) {
+          setIsPlaying(false)
+          showToast('音频加载失败，请重试')
+        }
+        setProgress(partOffsetRef.current + audio.currentTime)
+      }
+    } finally {
+      if (isCurrent()) {
+        partLoadingRef.current = false
+        setLoadingAudio(false)
+      }
+    }
+  }, [showToast])
+
   const handleTrackEnd = useCallback(() => {
+    if (partLoadingRef.current) return
+    const parts = sourceRef.current?.parts
+    if (parts && partIndexRef.current + 1 < parts.length) {
+      void loadPart(partIndexRef.current + 1, 0)
+      return
+    }
     const displayQueue = isShuffled ? shuffledQueueRef.current : queue
     if (!settings.autoPlay && repeatMode !== 'one') {
       setIsPlaying(false)
@@ -224,6 +323,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
     switch (repeatMode) {
       case 'one':
+        if (parts) {
+          shouldAutoplayRef.current = true
+          void loadPart(0, 0)
+          return
+        }
         if (audioRef.current) {
           audioRef.current.currentTime = 0
           shouldAutoplayRef.current = true
@@ -253,7 +357,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         setIsPlaying(true)
       }
     }
-  }, [isShuffled, queue, repeatMode, settings.autoPlay])
+  }, [isShuffled, queue, repeatMode, settings.autoPlay, loadPart])
 
   // 当 currentTrack 变化时加载并播放音频
   useEffect(() => {
@@ -261,6 +365,13 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
     let cancelled = false
     const audio = audioRef.current
+    ++partRequestRef.current
+    sourceRef.current = null
+    partIndexRef.current = 0
+    partOffsetRef.current = 0
+    partLoadingRef.current = true
+    pendingSeekRef.current = null
+    audio.pause()
 
     async function loadAndPlay() {
       setLoadingAudio(true)
@@ -271,16 +382,16 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         const source = await extractAudio(currentTrack!.bvid || currentTrack!.id, fallback)
         if (cancelled) return
         const targetProgress = progress > 0 ? progress : 0
-        audio.src = source.audioUrl
-        audio.currentTime = targetProgress
-        if (shouldAutoplayRef.current) {
-          await audio.play()
-          setIsPlaying(true)
+        sourceRef.current = source
+        durationRef.current = source.duration
+        setDuration(source.duration)
+        if (source.parts) {
+          const position = locatePlaybackPosition(source.parts, targetProgress)
+          await loadPart(position.partIndex, position.partProgress, position.partIndex === 0 ? source : undefined)
         } else {
-          audio.pause()
-          setIsPlaying(false)
+          await loadPart(0, targetProgress, source)
         }
-        setDuration(source.duration || audio.duration || 0)
+        if (cancelled) return
 
         // 更新封面（提取到的可能更高清）
         if (source.coverUrl) {
@@ -292,15 +403,21 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         if (!cancelled) {
           // 降级：直接用原始信息触发 play（无音频源，标记为不可播放）
           setIsPlaying(false)
+          setLoadingAudio(false)
+          partLoadingRef.current = false
         }
-      } finally {
-        if (!cancelled) setLoadingAudio(false)
       }
     }
 
     loadAndPlay()
-    return () => { cancelled = true }
-  }, [currentTrack?.id, currentTrack?.bvid])
+    return () => {
+      cancelled = true
+      ++partRequestRef.current
+      sourceRef.current = null
+      pendingSeekRef.current = null
+      partLoadingRef.current = false
+    }
+  }, [currentTrack?.id, currentTrack?.bvid, loadPart])
 
   // ended 事件
   useEffect(() => {
@@ -333,6 +450,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       setIsPlaying(false)
     } else {
       shouldAutoplayRef.current = true
+      if (partLoadingRef.current) {
+        setIsPlaying(true)
+        return
+      }
       audioRef.current?.play().then(() => setIsPlaying(true)).catch(() => {})
     }
   }, [currentTrack, isPlaying])
@@ -361,12 +482,30 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     setIsPlaying(true)
   }, [isShuffled, queue])
 
+  // PlayerSlider 在松手时提交一次，避免拖动中反复中断长音频的 Range 请求。
   const handleSetProgress = useCallback((p: number) => {
-    if (audioRef.current) {
-      audioRef.current.currentTime = p
+    const audio = audioRef.current
+    const source = sourceRef.current
+    if (!audio || !source || !Number.isFinite(p)) return
+    const parts = source.parts
+    const max = parts ? timelineDuration(parts) : Number.isFinite(audio.duration) ? audio.duration : durationRef.current
+    const target = max > 0 ? Math.min(Math.max(p, 0), max) : Math.max(p, 0)
+    const position = parts ? locatePlaybackPosition(parts, target) : { partIndex: 0, partProgress: target }
+    if (partLoadingRef.current || position.partIndex !== partIndexRef.current) {
+      void loadPart(position.partIndex, position.partProgress)
+      return
     }
-    setProgress(p)
-  }, [])
+    pendingSeekRef.current = target
+    try {
+      audio.currentTime = position.partProgress
+      setProgress(target)
+      // 保留用户手势内的播放请求；seeked/canplay 会在数据就绪后补偿续播。
+      if (shouldAutoplayRef.current) void audio.play().catch(() => {})
+    } catch {
+      pendingSeekRef.current = null
+      showToast('暂时无法跳转，请稍后重试')
+    }
+  }, [showToast, loadPart])
 
   const handleSetVolume = useCallback((v: number) => {
     setVolumeState(v)
