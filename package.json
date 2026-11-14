@@ -16,7 +16,11 @@
     "electron:build": "npm run build && electron-builder",
     "harmony:prepare": "npm run build && node scripts/prepare-harmony.mjs",
     "harmony:build": "npm run harmony:prepare && node scripts/build-harmony.mjs",
-    "build:ota": "npm run build && node scripts/build-ota.mjs"
+    "build:ota": "npm run build && node scripts/build-ota.mjs",
+    "android:sync": "npm run build && cap sync android",
+    "android:debug": "npm run android:sync && cd android && gradlew assembleDebug",
+    "android:release": "npm run android:sync && cd android && gradlew assembleRelease",
+    "android:run": "npm run android:sync && cd android && gradlew installDebug"
   },
   "dependencies": {
     "electron-updater": "^6.3.9",
@@ -25,7 +29,9 @@
     "qrcode": "^1.5.4",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "react-router-dom": "^7.6.0"
+    "react-router-dom": "^7.6.0",
+    "@capacitor/android": "^8.6.0",
+    "@capacitor/core": "^8.6.0"
   },
   "devDependencies": {
     "@electron/asar": "^3.4.1",
@@ -41,7 +47,8 @@
     "vite": "^6.3.0",
     "vite-plugin-electron": "^0.29.1",
     "vite-plugin-electron-renderer": "^0.14.7",
-    "wait-on": "^8.0.0"
+    "wait-on": "^8.0.0",
+    "@capacitor/cli": "^8.6.0"
   },
   "build": {
     "appId": "com.hanversion.bilimusic",

@@ -4,11 +4,16 @@ import {
   loadFavoriteTracks,
   loadPlaylistTombstones,
   loadPlaylists,
-  saveFavoriteTombstones,
   saveFavoriteTracks,
+  saveFavoriteTombstones,
   savePlaylistTombstones,
   savePlaylists,
 } from './storage'
+import {
+  isWebdavAvailable,
+  webdavGet as webGet,
+  webdavPut as webPut,
+} from './webdavWeb'
 
 const SYNC_FILE = 'sync.json'
 const DEVICE_ID_KEY = 'bilimusic_device_id'
@@ -127,16 +132,35 @@ function buildPayload(
 
 let syncing = false
 
+// 传输层：Electron 走 IPC，Android 走原生 WebDAV 插件，普通浏览器走 fetch。
+type DavGet = (relPath: string) => Promise<{ ok: boolean; status: number; etag: string | null; content: string | null; message?: string }>
+type DavPut = (relPath: string, content: string, etag?: string) => Promise<{ ok: boolean; status: number; etag: string | null; content: string | null; message?: string }>
+
+function davTransport(): { get: DavGet; put: DavPut } | null {
+  const api = window.electronAPI
+  if (api?.webdavGet && api?.webdavPut) {
+    return { get: api.webdavGet.bind(api), put: api.webdavPut.bind(api) }
+  }
+  if (isWebdavAvailable()) {
+    return { get: webGet, put: webPut }
+  }
+  return null
+}
+
+export function isSyncSupported(): boolean {
+  return davTransport() !== null
+}
+
 // 双向同步：拉远端 → 与本地合并 → 写本地 → 推回远端（ETag 乐观并发，412 冲突重拉重并）
 export async function runSync(): Promise<SyncResult> {
-  const api = window.electronAPI
-  if (!api?.webdavGet || !api?.webdavPut) return { ok: false, message: '当前环境不支持同步' }
+  const dav = davTransport()
+  if (!dav) return { ok: false, message: '当前环境不支持同步' }
   if (syncing) return { ok: false, message: '同步进行中' }
   syncing = true
   window.dispatchEvent(new CustomEvent(SYNC_STATE_EVENT))
   try {
     for (let attempt = 0; attempt < 3; attempt++) {
-      const remoteRes = await api.webdavGet(SYNC_FILE)
+      const remoteRes = await dav.get(SYNC_FILE)
       if (!remoteRes.ok) return { ok: false, message: remoteRes.message || '拉取远端失败' }
       const remote = parsePayload(remoteRes.content)
 
@@ -163,7 +187,7 @@ export async function runSync(): Promise<SyncResult> {
       saveFavoriteTombstones(fav.tombstones)
 
       const payload = buildPayload(pl.items, pl.tombstones, fav.items, fav.tombstones)
-      const putRes = await api.webdavPut(SYNC_FILE, JSON.stringify(payload), remoteRes.etag || undefined)
+      const putRes = await dav.put(SYNC_FILE, JSON.stringify(payload), remoteRes.etag || undefined)
       if (putRes.ok) {
         setLastSync(payload.syncedAt)
         return { ok: true, message: '同步完成' }
@@ -182,8 +206,8 @@ export async function runSync(): Promise<SyncResult> {
 
 // 强制上传：本地覆盖远端（首台设备初始化 / 以本地为准）
 export async function forceUpload(): Promise<SyncResult> {
-  const api = window.electronAPI
-  if (!api?.webdavPut) return { ok: false, message: '当前环境不支持同步' }
+  const dav = davTransport()
+  if (!dav) return { ok: false, message: '当前环境不支持同步' }
   try {
     const payload = buildPayload(
       loadPlaylists(),
@@ -191,7 +215,7 @@ export async function forceUpload(): Promise<SyncResult> {
       loadFavoriteTracks(),
       loadFavoriteTombstones(),
     )
-    const res = await api.webdavPut(SYNC_FILE, JSON.stringify(payload))
+    const res = await dav.put(SYNC_FILE, JSON.stringify(payload))
     if (!res.ok) return { ok: false, message: res.message || '上传失败' }
     setLastSync(payload.syncedAt)
     return { ok: true, message: '已上传到云端' }
@@ -202,10 +226,10 @@ export async function forceUpload(): Promise<SyncResult> {
 
 // 强制下载：远端覆盖本地（新设备 / 以云端为准）
 export async function forceDownload(): Promise<SyncResult> {
-  const api = window.electronAPI
-  if (!api?.webdavGet) return { ok: false, message: '当前环境不支持同步' }
+  const dav = davTransport()
+  if (!dav) return { ok: false, message: '当前环境不支持同步' }
   try {
-    const res = await api.webdavGet(SYNC_FILE)
+    const res = await dav.get(SYNC_FILE)
     if (!res.ok) return { ok: false, message: res.message || '拉取失败' }
     const remote = parsePayload(res.content)
     if (!remote) return { ok: false, message: '云端暂无同步数据' }

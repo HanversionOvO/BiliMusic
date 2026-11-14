@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
-import { Routes, Route } from 'react-router-dom'
+import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAutoSync } from '@/hooks/useAutoSync'
+import { isMobilePlatform } from '@/hooks/useIsMobile'
 import { PlayerProvider } from '@/contexts/PlayerContext'
 import { NowPlayingProvider } from '@/contexts/NowPlayingContext'
 import { AuthProvider, useAuth } from '@/contexts/AuthContext'
@@ -39,6 +40,8 @@ export default function App() {
   // 云同步自动触发（启动 + 改动防抖 + 周期）
   useAutoSync()
 
+  const mobile = isMobilePlatform()
+
   return (
     <AuthProvider>
       <PlayerProvider>
@@ -46,8 +49,8 @@ export default function App() {
           <AddToPlaylistProvider>
             <Routes>
               <Route element={<MainLayout />}>
-                <Route path="/" element={<Discover />} />
-                <Route path="/discover" element={<Discover />} />
+                <Route path="/" element={mobile ? <Navigate to="/recommend" replace /> : <Discover />} />
+                <Route path="/discover" element={mobile ? <Navigate to="/recommend" replace /> : <Discover />} />
                 <Route path="/search" element={<SearchPage />} />
                 <Route path="/recommend" element={<Recommend />} />
                 <Route path="/recent" element={<Recent />} />

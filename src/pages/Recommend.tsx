@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { Flame, Loader2, Play, RefreshCw, Sparkles } from 'lucide-react'
 import { usePlayer } from '@/contexts/PlayerContext'
 import { getMusicCenterRank, getNewSongs, type MusicSong } from '@/services/api'
+import { isMobilePlatform } from '@/hooks/useIsMobile'
 import type { Track } from '@/types'
 import {
   ActionButton,
@@ -76,27 +77,57 @@ export default function Recommend() {
   const heroSong = rankSongs[0] || newSongs[0]
   const featured = newSongs.slice(0, 3)
   const rankList = rankSongs.slice(0, 18)
+  const mobile = isMobilePlatform()
 
   return (
     <MusicPageShell>
-      <MusicHero
-        eyebrow="For You"
-        title="推荐"
-        subtitle="来自 B站音乐中心的热歌与新歌，用更接近 Apple Music 的方式呈现。"
-        image={heroSong?.coverUrl}
-        tone="red"
-        action={(
-          <ActionButton onClick={() => handlePlayAll(rankSongs.length ? rankSongs : newSongs)} disabled={loading || (!rankSongs.length && !newSongs.length)}>
-            <Play size={17} fill="currentColor" />
-            播放推荐
-          </ActionButton>
-        )}
-      />
+      {!mobile && (
+        <MusicHero
+          eyebrow="For You"
+          title="推荐"
+          subtitle="来自 B站音乐中心的热歌与新歌，用更接近 Apple Music 的方式呈现。"
+          image={heroSong?.coverUrl}
+          tone="red"
+          action={(
+            <ActionButton onClick={() => handlePlayAll(rankSongs.length ? rankSongs : newSongs)} disabled={loading || (!rankSongs.length && !newSongs.length)}>
+              <Play size={17} fill="currentColor" />
+              播放推荐
+            </ActionButton>
+          )}
+        />
+      )}
 
       {loading ? (
         <div className="am-loading"><Loader2 size={30} className="spin" /></div>
       ) : error ? (
         <EmptyLibrary icon={<RefreshCw size={38} />} title="加载失败" subtitle={error} />
+      ) : mobile ? (
+        <MusicSection
+          title="热歌榜"
+          icon={<Flame size={22} />}
+          action={(
+            <ActionButton onClick={() => handlePlayAll(rankSongs)} disabled={loading || !rankSongs.length}>
+              <Play size={15} fill="currentColor" />
+              播放推荐
+            </ActionButton>
+          )}
+        >
+          <TrackList>
+            {rankList.map((song, index) => {
+              const track = songToTrack(song)
+              return (
+                <TrackListRow
+                  key={song.bvid}
+                  track={track}
+                  index={index + 1}
+                  isCurrent={player.currentTrack?.id === song.bvid}
+                  isPlaying={player.isPlaying}
+                  onPlay={() => handlePlay(song)}
+                />
+              )
+            })}
+          </TrackList>
+        </MusicSection>
       ) : (
         <>
           <MusicSection title="新歌速递" icon={<Sparkles size={22} />}>

@@ -12,12 +12,12 @@ import {
   User,
   ChevronRight,
   Plus,
-  X,
   type LucideIcon,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useAppSettings } from '@/hooks/useAppSettings'
+import PlaylistDialog from '@/components/PlaylistDialog'
 import { createPlaylist, loadPlaylists, PLAYLISTS_CHANGED_EVENT } from '@/utils/storage'
 import type { Playlist } from '@/types'
 
@@ -58,14 +58,14 @@ const spring = {
   mass: 0.7,
 } as const
 
-export default function Sidebar() {
+export default function Sidebar({ forceExpanded = false }: { forceExpanded?: boolean }) {
   const { isLoggedIn, username, avatar, setShowLogin } = useAuth()
   const { settings } = useAppSettings()
   const navigate = useNavigate()
   const [playlists, setPlaylists] = useState<Playlist[]>(() => loadPlaylists())
   const [creating, setCreating] = useState(false)
   const [isNarrow, setIsNarrow] = useState(() => window.innerWidth < 1100)
-  const collapsed = settings.sidebarState === 'collapsed' || (settings.sidebarState === 'auto' && isNarrow)
+  const collapsed = !forceExpanded && (settings.sidebarState === 'collapsed' || (settings.sidebarState === 'auto' && isNarrow))
 
   useEffect(() => {
     const sync = () => setPlaylists(loadPlaylists())
@@ -98,6 +98,7 @@ export default function Sidebar() {
         transition={{ duration: 0.38, ease: [0.22, 1, 0.36, 1] }}
         style={{
           width: collapsed ? 78 : 244,
+          height: forceExpanded ? '100%' : undefined,
           background: 'var(--sidebar-bg)',
           backdropFilter: 'blur(28px) saturate(150%)',
           WebkitBackdropFilter: 'blur(28px) saturate(150%)',
@@ -317,86 +318,13 @@ export default function Sidebar() {
 
       <AnimatePresence>
         {creating && (
-          <CreatePlaylistDialog
+          <PlaylistDialog
             onClose={() => setCreating(false)}
-            onCreate={handleCreatePlaylist}
+            onSubmit={handleCreatePlaylist}
           />
         )}
       </AnimatePresence>
     </>
-  )
-}
-
-function CreatePlaylistDialog({
-  onClose,
-  onCreate,
-}: {
-  onClose: () => void
-  onCreate: (input: { name: string; description?: string }) => void
-}) {
-  const [name, setName] = useState('')
-  const [description, setDescription] = useState('')
-  const trimmedName = name.trim()
-
-  const submit = () => {
-    if (!trimmedName) return
-    onCreate({ name: trimmedName, description })
-  }
-
-  return (
-    <motion.div
-      className="playlist-dialog-backdrop"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.2 }}
-      onMouseDown={onClose}
-    >
-      <motion.div
-        className="playlist-dialog"
-        initial={{ opacity: 0, y: 18, scale: 0.97 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        exit={{ opacity: 0, y: 18, scale: 0.97 }}
-        transition={{ type: 'spring', stiffness: 360, damping: 32 }}
-        onMouseDown={(e) => e.stopPropagation()}
-      >
-        <div className="playlist-dialog__head">
-          <div>
-            <p>New Playlist</p>
-            <h2>新建歌单</h2>
-          </div>
-          <button type="button" onClick={onClose} aria-label="关闭">
-            <X size={18} />
-          </button>
-        </div>
-
-        <label className="playlist-field">
-          <span>歌单名</span>
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') submit() }}
-            placeholder="例如：深夜循环"
-            autoFocus
-          />
-        </label>
-
-        <label className="playlist-field">
-          <span>描述</span>
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="可选，写一点这个歌单的氛围"
-            rows={3}
-          />
-        </label>
-
-        <div className="playlist-dialog__actions">
-          <button type="button" onClick={onClose}>取消</button>
-          <button type="button" onClick={submit} disabled={!trimmedName}>创建</button>
-        </div>
-      </motion.div>
-    </motion.div>
   )
 }
 

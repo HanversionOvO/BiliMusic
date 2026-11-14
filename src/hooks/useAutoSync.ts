@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
-import { isSyncing, runSync, WEBDAV_CONFIGURED_EVENT } from '@/utils/sync'
+import { isSyncing, isSyncSupported, runSync, WEBDAV_CONFIGURED_EVENT } from '@/utils/sync'
+import { webdavGetConfig } from '@/utils/webdavWeb'
 import { FAVORITES_CHANGED_EVENT, PLAYLISTS_CHANGED_EVENT } from '@/utils/storage'
 
 const DEBOUNCE = 5000
@@ -10,8 +11,7 @@ const STARTUP_DELAY = 3000
 // 防回环关键：同步自身写入会触发 CHANGED 事件，isSyncing() 时一律忽略，否则无限循环。
 export function useAutoSync(): void {
   useEffect(() => {
-    const api = window.electronAPI
-    if (!api?.getWebdavConfig || !api?.webdavGet) return
+    if (!isSyncSupported()) return
 
     let configured = false
     let debounceTimer: ReturnType<typeof setTimeout> | null = null
@@ -32,9 +32,15 @@ export function useAutoSync(): void {
       if (!periodicTimer) periodicTimer = setInterval(sync, PERIODIC)
     }
 
-    api.getWebdavConfig().then((c) => {
-      if (c?.configured) enable()
-    })
+    // Electron：主进程查询；WebView（Android）：localStorage 查询
+    const api = window.electronAPI
+    if (api?.getWebdavConfig) {
+      api.getWebdavConfig().then((c) => {
+        if (c?.configured) enable()
+      })
+    } else {
+      if (webdavGetConfig().configured) enable()
+    }
 
     window.addEventListener(PLAYLISTS_CHANGED_EVENT, onChange)
     window.addEventListener(FAVORITES_CHANGED_EVENT, onChange)

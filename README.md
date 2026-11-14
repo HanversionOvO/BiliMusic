@@ -310,6 +310,12 @@ release/
 - macOS: DMG 与 ZIP。
 - Linux: AppImage 与 DEB。
 
+## Android
+
+新增基于 Capacitor 的 Android 客户端，支持移动端布局、后台播放、通知栏和锁屏媒体控制，以及原生 WebDAV 同步。Android 7.0（API 24）及以上可用。
+
+构建、签名与测试步骤见 [Android 开发说明](docs/android.md)。
+
 ## HarmonyOS PC
 
 鸿蒙 PC Electron 工程位于：

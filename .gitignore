@@ -35,3 +35,15 @@ platform/HarmonyOS/oh_modules
 /platform/HarmonyOS/web_engine/src/main/resources/rawfile
 /platform/HarmonyOS/web_engine/src/main/resources/resfile
 /platform/HarmonyOS/dependencies
+
+# Android local configuration, signing material, and build outputs
+/android/local.properties
+/android/.idea
+/android/**/.gradle
+/android/**/build
+/android/app/src/main/assets/capacitor.config.json
+/android/captures
+/android/.cxx
+/android/keystore.properties
+/android/*.keystore
+/android/*.jks

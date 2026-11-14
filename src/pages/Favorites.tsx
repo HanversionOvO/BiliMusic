@@ -3,6 +3,7 @@ import { Heart, Play, X } from 'lucide-react'
 import { usePlayer } from '@/contexts/PlayerContext'
 import AddToPlaylistButton from '@/components/AddToPlaylistButton'
 import { loadFavoriteTracks, removeFavoriteTrack, FAVORITES_CHANGED_EVENT } from '@/utils/storage'
+import { isMobilePlatform } from '@/hooks/useIsMobile'
 import {
   ActionButton,
   EmptyLibrary,
@@ -18,6 +19,7 @@ import type { Track } from '@/types'
 export default function Favorites() {
   const [tracks, setTracks] = useState<Track[]>(() => loadFavoriteTracks())
   const player = usePlayer()
+  const mobile = isMobilePlatform()
 
   useEffect(() => {
     const refresh = () => setTracks(loadFavoriteTracks())
@@ -34,27 +36,30 @@ export default function Favorites() {
   }, [tracks, player])
 
   const heroImage = tracks[0]?.coverUrl
+  const heroActions = tracks.length > 0 && (
+    <ActionButton onClick={handlePlayAll}>
+      <Play size={17} fill="currentColor" />
+      播放全部
+    </ActionButton>
+  )
 
   return (
     <MusicPageShell>
-      <MusicHero
-        eyebrow="Favorites"
-        title="我喜欢"
-        subtitle={tracks.length ? `收藏的 ${tracks.length} 首歌曲都在这里。` : '点击歌曲旁的心形按钮收藏喜欢的音乐。'}
-        image={heroImage}
-        tone="red"
-        action={tracks.length > 0 && (
-          <ActionButton onClick={handlePlayAll}>
-            <Play size={17} fill="currentColor" />
-            播放全部
-          </ActionButton>
-        )}
-      />
+      {!mobile && (
+        <MusicHero
+          eyebrow="Favorites"
+          title="我喜欢"
+          subtitle={tracks.length ? `收藏的 ${tracks.length} 首歌曲都在这里。` : '点击歌曲旁的心形按钮收藏喜欢的音乐。'}
+          image={heroImage}
+          tone="red"
+          action={heroActions}
+        />
+      )}
 
       {tracks.length === 0 ? (
         <EmptyLibrary icon={defaultIconFor('favorites')} title="暂无收藏" subtitle="喜欢的歌曲会以更精致的列表在这里出现。" />
       ) : (
-        <MusicSection title="收藏曲目" icon={<Heart size={22} />}>
+        <MusicSection title="收藏曲目" icon={<Heart size={22} />} action={mobile ? heroActions : undefined}>
           <TrackList>
             {tracks.map((track, index) => (
               <TrackListRow

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import {
+  ChevronDown,
   Cloud,
   CloudDownload,
   CloudUpload,
@@ -20,7 +21,9 @@ import {
   Sun,
   UserRound,
 } from 'lucide-react'
-import { ActionButton, MusicHero, MusicPageShell, MusicSection } from '@/components/AppleMusicPage'
+import { ActionButton, MusicHero, MusicPageShell } from '@/components/AppleMusicPage'
+import { isMobilePlatform } from '@/hooks/useIsMobile'
+import { webdavConfigure, webdavGetConfig, webdavTest } from '@/utils/webdavWeb'
 import { useTheme } from '@/hooks/useTheme'
 import { useAppSettings } from '@/hooks/useAppSettings'
 import { useAuth } from '@/contexts/AuthContext'
@@ -88,13 +91,24 @@ export default function Settings() {
   const [lastSync, setLastSync] = useState(getLastSync())
 
   useEffect(() => {
-    window.electronAPI?.getWebdavConfig?.().then((c) => {
-      if (c?.configured) {
+    // Electron：主进程存配置；WebView（Android）：localStorage 存配置
+    const api = window.electronAPI
+    if (api?.getWebdavConfig) {
+      api.getWebdavConfig().then((c) => {
+        if (c?.configured) {
+          setDavUrl(c.url)
+          setDavUser(c.username)
+          setDavConfigured(true)
+        }
+      })
+    } else {
+      const c = webdavGetConfig()
+      if (c.configured) {
         setDavUrl(c.url)
         setDavUser(c.username)
         setDavConfigured(true)
       }
-    })
+    }
     const onSyncState = () => setLastSync(getLastSync())
     window.addEventListener(SYNC_STATE_EVENT, onSyncState)
     return () => window.removeEventListener(SYNC_STATE_EVENT, onSyncState)
@@ -105,8 +119,13 @@ export default function Settings() {
       setSyncMessage('请填写 WebDAV 地址和账号')
       return false
     }
-    // 密码留空表示沿用已保存的密码（主进程处理）
-    await window.electronAPI?.configureWebdav?.({ url: davUrl.trim(), username: davUser.trim(), password: davPass })
+    // 密码留空表示沿用已保存的密码（Electron 主进程 / webdavWeb 均处理）
+    const api = window.electronAPI
+    if (api?.configureWebdav) {
+      await api.configureWebdav({ url: davUrl.trim(), username: davUser.trim(), password: davPass })
+    } else {
+      await webdavConfigure({ url: davUrl.trim(), username: davUser.trim(), password: davPass })
+    }
     setDavConfigured(true)
     setDavPass('')
     window.dispatchEvent(new CustomEvent(WEBDAV_CONFIGURED_EVENT)) // 通知 useAutoSync 启用
@@ -118,7 +137,10 @@ export default function Settings() {
   const handleTestWebdav = async () => {
     if (!(await persistWebdav())) return
     setSyncMessage('正在测试连接…')
-    const r = await window.electronAPI?.testWebdav?.()
+    const api = window.electronAPI
+    const r = api?.testWebdav
+      ? await api.testWebdav()
+      : await webdavTest()
     setSyncMessage(r?.message || '测试失败')
   }
   const runSyncTask = async (task: () => Promise<SyncResult>, busyText: string) => {
@@ -164,25 +186,27 @@ export default function Settings() {
 
   return (
     <MusicPageShell>
-      <MusicHero
-        eyebrow="Preferences"
-        title="设置"
-        subtitle="整理外观、播放、下载和账号，让每一次打开都保持熟悉的节奏。"
-        tone="red"
-        action={(
-          isLoggedIn ? (
-            <ActionButton tone="subtle" onClick={logout}>
-              <LogOut size={16} />
-              退出登录
-            </ActionButton>
-          ) : (
-            <ActionButton onClick={() => setShowLogin(true)}>
-              <LogIn size={16} />
-              扫码登录
-            </ActionButton>
-          )
-        )}
-      />
+      {!isMobilePlatform() && (
+        <MusicHero
+          eyebrow="Preferences"
+          title="设置"
+          subtitle="整理外观、播放、下载和账号，让每一次打开都保持熟悉的节奏。"
+          tone="red"
+          action={(
+            isLoggedIn ? (
+              <ActionButton tone="subtle" onClick={logout}>
+                <LogOut size={16} />
+                退出登录
+              </ActionButton>
+            ) : (
+              <ActionButton onClick={() => setShowLogin(true)}>
+                <LogIn size={16} />
+                扫码登录
+              </ActionButton>
+            )
+          )}
+        />
+      )}
 
       <div className="settings-grid">
         <div className="settings-column">
@@ -382,10 +406,17 @@ function SettingsGroup({
   icon: ReactNode
   children: ReactNode
 }) {
+  // 手机屏小：分区默认折叠，点标题展开
+  const [open, setOpen] = useState(() => !isMobilePlatform())
   return (
-    <MusicSection title={title} icon={icon}>
-      <div className="settings-panel">{children}</div>
-    </MusicSection>
+    <section className={`settings-group ${open ? 'is-open' : ''}`}>
+      <button type="button" className="settings-group__head" onClick={() => setOpen(o => !o)}>
+        <span className="settings-group__icon">{icon}</span>
+        <h2>{title}</h2>
+        <ChevronDown size={18} className={`settings-group__chevron ${open ? 'is-open' : ''}`} />
+      </button>
+      {open && <div className="settings-panel">{children}</div>}
+    </section>
   )
 }
 

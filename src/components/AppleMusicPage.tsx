@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion'
 import { Clock, Heart, Music, Play, Trash2 } from 'lucide-react'
 import TrackActions from '@/components/TrackActions'
+import { isMobilePlatform } from '@/hooks/useIsMobile'
 import type { Track } from '@/types'
 
 export function MusicPageShell({ children }: { children: React.ReactNode }) {
@@ -31,6 +32,16 @@ export function MusicHero({
   image?: string
   tone?: 'pink' | 'blue' | 'purple' | 'red'
 }) {
+  // 手机屏小：大 hero 卡片改为一行动作栏（无标题），只保留功能按钮。
+  if (isMobilePlatform()) {
+    if (!action) return null
+    return (
+      <div className="am-hero-mobile">
+        <div className="am-hero-mobile__action">{action}</div>
+      </div>
+    )
+  }
+
   return (
     <section className={`am-hero am-hero--${tone}`}>
       {image && <div className="am-hero__image" style={{ backgroundImage: `url(${image})` }} />}
@@ -72,12 +83,23 @@ export function ActionButton({
   )
 }
 
-export function MusicSection({ title, icon, children }: { title: string; icon?: React.ReactNode; children: React.ReactNode }) {
+export function MusicSection({
+  title,
+  icon,
+  action,
+  children,
+}: {
+  title: string
+  icon?: React.ReactNode
+  action?: React.ReactNode
+  children: React.ReactNode
+}) {
   return (
     <section className="am-section">
       <div className="am-section__head">
         {icon && <span>{icon}</span>}
         <h2>{title}</h2>
+        {action && <div className="am-section__action">{action}</div>}
       </div>
       {children}
     </section>
@@ -181,10 +203,12 @@ export function EmptyLibrary({
   icon,
   title,
   subtitle,
+  action,
 }: {
   icon?: React.ReactNode
   title: string
   subtitle: string
+  action?: React.ReactNode
 }) {
   return (
     <motion.div
@@ -196,6 +220,7 @@ export function EmptyLibrary({
       <div>{icon || <Music size={38} />}</div>
       <h2>{title}</h2>
       <p>{subtitle}</p>
+      {action && <div className="am-empty__action">{action}</div>}
     </motion.div>
   )
 }

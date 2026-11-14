@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">BiliMusic</string>
+    <string name="title_activity_main">BiliMusic</string>
+    <string name="package_name">com.hanversion.bilimusic</string>
+    <string name="custom_url_scheme">com.hanversion.bilimusic</string>
+</resources>

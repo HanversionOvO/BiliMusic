@@ -1857,6 +1857,106 @@ body {
   flex-direction: column;
 }
 
+/* 专注模式按钮激活态（移动端） */
+.now-playing-close.is-focus-active {
+  color: #ff375f;
+  background: rgba(255, 55, 95, 0.22);
+}
+
+/* 移动端播放详情页：封面收缩、控制区沉底（贴近拇指） */
+@media (max-width: 960px) {
+  .now-playing-left {
+    width: 100%;
+    height: 100%;
+    margin: 0 auto;
+    padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));
+  }
+
+  .now-playing-cover-wrap {
+    max-width: min(88vw, 480px);
+    margin: 0 auto;
+    width: 100%;
+    min-height: min(56vw, 300px);
+  }
+
+  /* 歌词模式：歌词面板替换封面（与封面同尺寸） */
+  .now-playing-lyrics-inline {
+    height: min(88vw, 480px);
+    border-radius: 22px;
+    background: rgba(0, 0, 0, 0.32);
+    border: 1px solid rgba(255, 255, 255, 0.13);
+    overflow: hidden;
+  }
+
+  /* 右侧歌词卡在移动端隐藏（歌词已并入封面区） */
+  .now-playing-lyrics-card {
+    display: none;
+  }
+
+  .now-playing-meta {
+    margin-top: 18px;
+  }
+
+  /* 顶部按钮组贴右缘（移动端无左侧收起按钮，右侧三键右对齐） */
+  .now-playing-top {
+    justify-content: flex-end;
+    padding-right: 16px;
+  }
+
+  /* 标题行右侧：评论 + 喜欢 并排 */
+  .now-playing-meta__actions {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 14px;
+    flex-shrink: 0;
+  }
+
+  .now-playing-meta__actions .now-playing-heart {
+    width: 42px;
+    height: 42px;
+  }
+
+  /* 进度条下沉：贴住下方控制排（不与标题留大空隙） */
+  .now-playing-progress {
+    margin-top: 20px;
+    margin-bottom: 6px;
+  }
+
+  .now-playing-controls {
+    position: sticky !important; /* 覆盖后置基础规则的 relative */
+    bottom: 0;
+    margin-top: auto !important; /* 覆盖后置基础规则的 24px */
+    padding: 10px 4px max(12px, env(safe-area-inset-bottom, 0px));
+    background: linear-gradient(to top, rgba(7, 7, 10, 0.92), rgba(7, 7, 10, 0.55) 70%, transparent);
+    z-index: 5;
+  }
+
+  /* 移动端控制排：5 个按钮整体居中 */
+  .now-playing-control-cluster {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    justify-content: center;
+    gap: clamp(18px, 7vw, 40px);
+    padding: 0 6px;
+  }
+
+  .now-playing-control-cluster .now-playing-round {
+    width: clamp(44px, 12vw, 56px);
+    height: clamp(44px, 12vw, 56px);
+  }
+
+  .now-playing-play {
+    width: clamp(62px, 17vw, 78px);
+    height: clamp(62px, 17vw, 78px);
+  }
+
+  .now-playing-volume-popover {
+    display: none; /* 音量恒最大，系统音量键调节 */
+  }
+}
+
 .now-playing-cover-wrap {
   position: relative;
   perspective: 1000px;
@@ -2043,6 +2143,18 @@ body {
 .now-playing-play:disabled {
   cursor: wait;
   opacity: 0.76;
+}
+
+/* 移动端只有五键，覆盖桌面端六列布局，让播放键落在页面中线。 */
+.now-playing--mobile .now-playing-control-cluster {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto minmax(0, 1fr) minmax(0, 1fr);
+  justify-items: center;
+  width: 100%;
+  max-width: 420px;
+  margin-inline: auto;
+  padding: 0;
+  gap: clamp(6px, 3vw, 18px);
 }
 
 .now-playing-repeat {
@@ -2693,14 +2805,20 @@ body {
 @media (max-width: 960px) {
   .now-playing-main {
     grid-template-columns: 1fr;
-    align-items: start;
+    /* stretch 让 left 填满 main 可视高度：sticky 控制排钉屏幕底缘的前提 */
+    align-items: stretch;
     overflow-y: auto;
-    padding-top: 8px;
+    padding: 0 18px;
+    min-height: 0;
   }
 
   .now-playing-left {
-    width: min(100%, 440px);
+    width: 100%;
     margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    min-height: 100%;
   }
 
   .now-playing-lyrics-card {
@@ -2769,6 +2887,37 @@ body {
   background: #16171a;
   box-shadow: 0 26px 80px rgba(0, 0, 0, 0.18), inset 0 1px rgba(255, 255, 255, 0.14);
   border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* 移动端动作栏：替代 am-hero 大卡片，只保留功能按钮 */
+.am-hero-mobile {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 2px 2px 14px;
+}
+
+/* 移动端 hero 出现在浅色页面背景上（不再是深色 hero 卡内），
+   原白字半透明按钮无对比度 —— 覆盖为实色 */
+.am-hero-mobile .am-action {
+  color: #fff;
+  background: var(--color-primary);
+  border: none;
+  box-shadow: 0 10px 24px rgba(251, 114, 153, 0.35);
+}
+
+.am-hero-mobile .am-action--subtle {
+  color: var(--color-primary);
+  background: var(--color-primary-light);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 36%, transparent);
+  box-shadow: none;
+}
+
+.am-hero-mobile .am-action--danger {
+  color: #fff;
+  background: #ff375f;
+  border: none;
 }
 
 .am-hero--pink {
@@ -2924,6 +3073,45 @@ body {
   align-items: center;
   gap: 10px;
   padding: 0 3px;
+}
+
+/* 分区头右侧动作：与标题同行（"热歌榜 ... 播放推荐"） */
+.am-section__action {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* 分区头按钮出现在浅色页面背景上（不在深色 hero 卡内），
+   原半透明白底无对比度 —— 全部覆盖为实色 */
+.am-section__action .am-action {
+  min-height: 34px;
+  padding: 0 14px;
+  font-size: 12px;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.am-section__action .am-action--primary {
+  color: #fff;
+  background: var(--color-primary);
+  border: none;
+  box-shadow: 0 6px 16px rgba(251, 114, 153, 0.35);
+}
+
+.am-section__action .am-action--subtle {
+  color: var(--color-primary);
+  background: var(--color-primary-light);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 36%, transparent);
+  box-shadow: none;
+}
+
+.am-section__action .am-action--danger {
+  color: #fff;
+  background: #ff375f;
+  border: none;
 }
 
 .am-section__head span {
@@ -3249,6 +3437,57 @@ body {
   -webkit-backdrop-filter: blur(var(--glass-blur));
 }
 
+.am-empty__action {
+  margin-top: 16px;
+}
+
+/* 空态卡内按钮：同分区头，覆盖为实色 */
+.am-empty__action .am-action--primary {
+  color: #fff;
+  background: var(--color-primary);
+  border: none;
+  box-shadow: 0 6px 16px rgba(251, 114, 153, 0.35);
+}
+
+/* 移动端歌单详情页头部：歌单名 + 编辑/删除图标按钮一行 */
+.playlist-detail-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 2px 12px;
+}
+
+.playlist-detail-head h1 {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.2;
+  color: var(--color-foreground);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.playlist-detail-head__icon {
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  color: var(--color-muted);
+  cursor: pointer;
+}
+
+.playlist-detail-head__icon--danger {
+  color: #ff375f;
+}
+
 .am-empty>div {
   width: 84px;
   height: 84px;
@@ -3402,6 +3641,69 @@ body {
   grid-template-columns: repeat(2, minmax(360px, 1fr));
   gap: 24px;
   align-items: start;
+}
+
+/* 折叠式设置分区（移动端默认收起） */
+.settings-group {
+  border-radius: 18px;
+  background: var(--glass-bg);
+  border: 1px solid var(--am-border, rgba(0, 0, 0, 0.07));
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.settings-group__head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 15px 16px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+}
+
+.settings-group__head h2 {
+  margin: 0;
+  flex: 1;
+  font-size: 16px;
+  font-weight: 650;
+  color: var(--am-text, #18191c);
+}
+
+.settings-group__icon {
+  display: flex;
+  color: var(--color-primary);
+}
+
+.settings-group__chevron {
+  color: var(--am-muted, rgba(0, 0, 0, 0.4));
+  transition: transform 0.25s ease;
+}
+
+.settings-group__chevron.is-open {
+  transform: rotate(180deg);
+}
+
+.settings-group .settings-panel {
+  padding: 4px 6px 14px;
+}
+
+/* 桌面端还原为常开外观 */
+@media (min-width: 721px) {
+  .settings-group__head {
+    pointer-events: none;
+    padding-bottom: 4px;
+  }
+  .settings-group__chevron {
+    display: none;
+  }
+  .settings-group .settings-panel {
+    display: block !important;
+    padding: 0 16px 16px;
+  }
 }
 
 .settings-column {
